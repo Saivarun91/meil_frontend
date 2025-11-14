@@ -98,6 +98,8 @@ export default function ProjectsPage() {
             setError("You don't have permission to update projects");
             return;
         }
+        console.log("editProject", editProject);
+        console.log("project_code", editProject.project_code);
 
         try {
             setSaving(true);
@@ -106,8 +108,8 @@ export default function ProjectsPage() {
                 setError("No authentication token found");
                 return;
             }
-
-            await updateProject(token, editProject.id, { project_name: editProject.project_name });
+            console.log("editProject", editProject);
+            await updateProject(token, editProject.project_code, { project_name: editProject.project_name });
             await loadProjects();
             setEditProject(null);
             setIsModalOpen(false);

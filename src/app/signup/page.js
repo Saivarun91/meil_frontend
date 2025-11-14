@@ -1,8 +1,9 @@
 "use client";
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import Link from "next/link";
 import axios from "axios";
 import { Eye, EyeOff, Mail, Lock, User, ArrowLeft, Package, Building, RefreshCw } from "lucide-react";
+import SearchableDropdown from "@/components/SearchableDropdown";
 
 export default function Signup() {
     const [formData, setFormData] = useState({
@@ -23,6 +24,27 @@ export default function Signup() {
     const [otp, setOtp] = useState("");
     const [otpLoading, setOtpLoading] = useState(false);
     const [resendLoading, setResendLoading] = useState(false);
+    const [companies, setCompanies] = useState([]);
+    const [loadingCompanies, setLoadingCompanies] = useState(false);
+
+    // Load companies on component mount
+    useEffect(() => {
+        const loadCompanies = async () => {
+            setLoadingCompanies(true);
+            try {
+                const res = await axios.get(`${process.env.NEXT_PUBLIC_API_BASE_URL}/company/companies/public/`);
+                if (res.data) {
+                    setCompanies(res.data || []);
+                }
+            } catch (err) {
+                console.error("Error loading companies:", err);
+                // Don't show error to user, just log it
+            } finally {
+                setLoadingCompanies(false);
+            }
+        };
+        loadCompanies();
+    }, []);
 
     const handleChange = (e) => {
         const { name, value } = e.target;
@@ -262,19 +284,47 @@ export default function Signup() {
 
                             {/* Company Name */}
                             <div>
-                                <label className="block text-sm font-medium text-gray-700 mb-1">Company Name</label>
-                                <div className="relative">
-                                    <Building className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400" size={20} />
-                                    <input
-                                        name="company_name"
-                                        type="text"
-                                        placeholder="Enter your company name"
-                                        className={`appearance-none relative block w-full pl-10 pr-3 py-3 border ${errors.company_name ? "border-red-300" : "border-gray-300"} rounded-lg`}
-                                        value={formData.company_name}
-                                        onChange={handleChange}
-                                    />
-                                </div>
+                                <label className="block text-sm font-medium text-gray-700 mb-1">Company Name *</label>
+                                {loadingCompanies ? (
+                                    <div className="text-sm text-gray-500 py-3">Loading companies...</div>
+                                ) : (
+                                    <>
+                                        {companies.length > 0 && (
+                                            <div className="mb-2">
+                                                <SearchableDropdown
+                                                    options={companies}
+                                                    value={formData.company_name}
+                                                    onChange={(value) => setFormData(prev => ({ ...prev, company_name: value || "" }))}
+                                                    placeholder="Select a company..."
+                                                    searchPlaceholder="Search companies..."
+                                                    getOptionLabel={(option) => {
+                                                        if (typeof option === 'string') return option;
+                                                        return option.company_name || String(option);
+                                                    }}
+                                                    getOptionValue={(option) => {
+                                                        if (typeof option === 'string') return option;
+                                                        return option.company_name || option;
+                                                    }}
+                                                />
+                                            </div>
+                                        )}
+                                        <div className="relative">
+                                            <Building className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400" size={20} />
+                                            <input
+                                                name="company_name"
+                                                type="text"
+                                                placeholder={companies.length > 0 ? "Or enter a new company name" : "Enter your company name"}
+                                                className={`appearance-none relative block w-full pl-10 pr-3 py-3 border ${errors.company_name ? "border-red-300" : "border-gray-300"} rounded-lg`}
+                                                value={formData.company_name}
+                                                onChange={handleChange}
+                                            />
+                                        </div>
+                                    </>
+                                )}
                                 {errors.company_name && <p className="mt-1 text-sm text-red-600">{errors.company_name}</p>}
+                                {companies.length > 0 && (
+                                    <p className="mt-1 text-xs text-gray-500">Select from existing companies above or enter a new company name in the field below</p>
+                                )}
                             </div>
 
                             {/* Description */}

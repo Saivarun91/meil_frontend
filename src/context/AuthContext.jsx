@@ -56,6 +56,15 @@ export function AuthProvider({ children }) {
             );
             const data = res.data;
 
+            // Check if role is not assigned
+            if (!data.role || data.role === null || data.role === "") {
+                return { 
+                    success: false, 
+                    error: "Role not assigned", 
+                    roleNotAssigned: true 
+                };
+            }
+
             setToken(data.token);
             setUser({
                 emp_id: data.emp_id,

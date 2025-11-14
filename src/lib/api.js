@@ -125,14 +125,14 @@ export const createProject = (token, data) => {
     return axiosInstance.post("projects/create/", data).then(res => res.data);
 };
 
-export const updateProject = (token, pk, data) => {
+export const updateProject = (token, project_code, data) => {
     const axiosInstance = createAxiosInstance(token);
-    return axiosInstance.put(`projects/${pk}/update/`, data).then(res => res.data);
+    return axiosInstance.put(`projects/${project_code}/update/`, data).then(res => res.data);
 };
 
-export const deleteProject = (token, pk) => {
+export const deleteProject = (token, project_code) => {
     const axiosInstance = createAxiosInstance(token);
-    return axiosInstance.delete(`projects/${pk}/delete/`).then(res => res.data);
+    return axiosInstance.delete(`projects/${project_code}/delete/`).then(res => res.data);
 };
 
 // Email Domains API
