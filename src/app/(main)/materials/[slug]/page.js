@@ -534,18 +534,27 @@ export default function MaterialDetailPage() {
                       {itemDetails.item.attributes && Object.keys(itemDetails.item.attributes).length > 0 ? (
                         <div className="border border-gray-200 rounded-md overflow-hidden">
                           <div className="divide-y divide-gray-200">
-                            {Object.entries(itemDetails.item.attributes).map(([key, value]) => (
-                              <div key={key} className="px-4 py-3 bg-white hover:bg-gray-50 transition-colors">
-                                <div className="flex justify-between items-center">
-                                  <div className="text-sm font-semibold text-gray-900">
-                                    {key}
-                                  </div>
-                                  <div className="text-sm text-gray-700 font-medium">
-                                    {value || "-"}
+                            {Object.entries(itemDetails.item.attributes).map(([key, value]) => {
+                              // Find the attribute definition to get UOM
+                              const attrDef = itemDetails.attributes?.find(attr => attr.attrib_name === key);
+                              const uom = attrDef?.unit;
+                              
+                              return (
+                                <div key={key} className="px-4 py-3 bg-white hover:bg-gray-50 transition-colors">
+                                  <div className="flex justify-between items-center">
+                                    <div className="text-sm font-semibold text-gray-900">
+                                      {key}
+                                      {uom && (
+                                        <span className="ml-2 text-xs text-gray-500 font-normal">({uom})</span>
+                                      )}
+                                    </div>
+                                    <div className="text-sm text-gray-700 font-medium">
+                                      {value || "-"}
+                                    </div>
                                   </div>
                                 </div>
-                              </div>
-                            ))}
+                              );
+                            })}
                           </div>
                         </div>
                       ) : (

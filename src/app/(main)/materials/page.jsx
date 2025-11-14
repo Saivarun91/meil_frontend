@@ -25,6 +25,7 @@ export default function MaterialsPage() {
   const [isViewModalOpen, setIsViewModalOpen] = useState(false);
   const [viewingMaterial, setViewingMaterial] = useState(null);
   const [editingMaterial, setEditingMaterial] = useState(null);
+  const [activeTab, setActiveTab] = useState("general");
   
   const [formData, setFormData] = useState({
     sap_item_id: "",
@@ -44,6 +45,13 @@ export default function MaterialsPage() {
       loadMaterialTypes();
     }
   }, [token]);
+
+  // Load attributes when switching to attributes tab if material group is selected
+  useEffect(() => {
+    if (activeTab === "attributes" && formData.mgrp_code && Object.keys(materialAttributes).length === 0) {
+      loadMaterialAttributes(formData.mgrp_code);
+    }
+  }, [activeTab, formData.mgrp_code]);
 
 
   const loadMaterials = async () => {
@@ -80,12 +88,21 @@ export default function MaterialsPage() {
   const loadMaterialAttributes = async (mgrpCode) => {
     try {
       const data = await fetchMaterialAttributes(token);
-      const attrForGroup = data.find(attr => attr.mgrp_code === mgrpCode);
-      if (attrForGroup) {
-        setMaterialAttributes(attrForGroup.attributes || {});
-      } else {
-        setMaterialAttributes({});
-      }
+      // Filter attributes for the selected material group
+      const attributesForGroup = data.filter(attr => attr.mgrp_code === mgrpCode);
+      
+      // Transform the list of attributes into the expected format
+      // { "Color": { "values": [...], ... }, "Size": { "values": [...], ... } }
+      const attributesObj = {};
+      attributesForGroup.forEach(attr => {
+        attributesObj[attr.attribute_name] = {
+          values: attr.possible_values || [],
+          uom: attr.uom || null,
+          print_priority: attr.print_priority || 0,
+        };
+      });
+      
+      setMaterialAttributes(attributesObj);
     } catch (err) {
       console.error("Error loading material attributes:", err);
       setMaterialAttributes({});
@@ -126,6 +143,7 @@ export default function MaterialsPage() {
       attributes: {},
     });
     setMaterialAttributes({});
+    setActiveTab("general");
     setError(null);
     setIsModalOpen(true);
   };
@@ -149,6 +167,7 @@ export default function MaterialsPage() {
     if (material.mgrp_code) {
       loadMaterialAttributes(material.mgrp_code);
     }
+    setActiveTab("general");
     setError(null);
     setIsModalOpen(true);
   };
@@ -431,128 +450,177 @@ export default function MaterialsPage() {
               </button>
             </div>
 
-            <div className="p-6 grid grid-cols-1 md:grid-cols-2 gap-4">
+            {/* Tabs */}
+            <div className="border-b border-gray-200">
+              <div className="flex">
+                <button
+                  onClick={() => setActiveTab("general")}
+                  className={`px-6 py-3 text-sm font-medium transition-colors ${
+                    activeTab === "general"
+                      ? "border-b-2 border-blue-600 text-blue-600"
+                      : "text-gray-500 hover:text-gray-700"
+                  }`}
+                >
+                  General Info
+                </button>
+                <button
+                  onClick={() => setActiveTab("attributes")}
+                  className={`px-6 py-3 text-sm font-medium transition-colors ${
+                    activeTab === "attributes"
+                      ? "border-b-2 border-blue-600 text-blue-600"
+                      : "text-gray-500 hover:text-gray-700"
+                  }`}
+                  disabled={!formData.mgrp_code}
+                >
+                  Attributes
+                  {!formData.mgrp_code && (
+                    <span className="ml-2 text-xs text-gray-400">(Select Material Group first)</span>
+                  )}
+                </button>
+              </div>
+            </div>
+
+            <div className="p-6">
               {error && (
-                <div className="md:col-span-2 bg-red-50 border border-red-200 rounded-lg p-3">
+                <div className="mb-4 bg-red-50 border border-red-200 rounded-lg p-3">
                   <div className="text-red-600 text-sm">{error}</div>
                 </div>
               )}
-              
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">SAP Item ID</label>
-                <input
-                  type="text"
-                  name="sap_item_id"
-                  value={formData.sap_item_id}
-                  onChange={handleInputChange}
-                  className="w-full px-4 py-2 border rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
-                  placeholder="SAP Item ID"
-                />
-              </div>
-              
-              <div>
-                <SearchableDropdown
-                  label="Material Type Code *"
-                  options={materialTypes}
-                  value={formData.mat_type_code}
-                  onChange={(value) => setFormData(prev => ({ ...prev, mat_type_code: value || "" }))}
-                  placeholder="Select material type..."
-                  searchPlaceholder="Search material types..."
-                  required
-                  getOptionLabel={(option) => {
-                    if (typeof option === 'string') return option;
-                    return option.mat_type_code ? `${option.mat_type_code} - ${option.mat_type_desc || ''}` : (option.mat_type_desc || String(option));
-                  }}
-                  getOptionValue={(option) => {
-                    if (typeof option === 'string') return option;
-                    return option.mat_type_code || option;
-                  }}
-                />
-              </div>
-              
-              <div>
-                <SearchableDropdown
-                  label="Material Group Code *"
-                  options={materialGroups}
-                  value={formData.mgrp_code}
-                  onChange={handleMgrpCodeChange}
-                  placeholder="Select material group..."
-                  searchPlaceholder="Search material groups..."
-                  required
-                  getOptionLabel={(option) => {
-                    if (typeof option === 'string') return option;
-                    return option.mgrp_code ? `${option.mgrp_code} - ${option.mgrp_shortname || option.mgrp_longname || ''}` : (option.mgrp_shortname || option.mgrp_longname || String(option));
-                  }}
-                  getOptionValue={(option) => {
-                    if (typeof option === 'string') return option;
-                    return option.mgrp_code || option;
-                  }}
-                />
-              </div>
-              
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">Search Text</label>
-                <input
-                  type="text"
-                  name="search_text"
-                  value={formData.search_text}
-                  onChange={handleInputChange}
-                  className="w-full px-4 py-2 border rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
-                  placeholder="Search text"
-                />
-              </div>
-              
-              <div className="md:col-span-2">
-                <label className="block text-sm font-medium text-gray-700 mb-1">Item Description *</label>
-                <textarea
-                  name="item_desc"
-                  value={formData.item_desc}
-                  onChange={handleInputChange}
-                  rows={3}
-                  className="w-full px-4 py-2 border rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
-                  placeholder="Item description"
-                />
-              </div>
-              
-              {/* Attributes Section */}
-              {formData.mgrp_code && Object.keys(materialAttributes).length > 0 && (
-                <div className="md:col-span-2">
-                  <label className="block text-sm font-medium text-gray-700 mb-2">Attributes</label>
-                  <div className="border rounded-lg p-4 bg-gray-50">
-                    {Object.entries(materialAttributes).map(([attrName, attrConfig]) => {
-                      const values = attrConfig.values || [];
-                      const currentValue = formData.attributes[attrName] || "";
-                      return (
-                        <div key={attrName} className="mb-4 last:mb-0">
-                          <label className="block text-sm font-medium text-gray-700 mb-1">{attrName}</label>
-                          <select
-                            value={currentValue}
-                            onChange={(e) => handleAttributeChange(attrName, e.target.value)}
-                            className="w-full px-4 py-2 border rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 bg-white"
-                          >
-                            <option value="">Select {attrName}</option>
-                            {values.map((value) => (
-                              <option key={value} value={value}>{value}</option>
-                            ))}
-                          </select>
-                        </div>
-                      );
-                    })}
+
+              {/* Tab 1: General Info */}
+              {activeTab === "general" && (
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">SAP Item ID</label>
+                    <input
+                      type="text"
+                      name="sap_item_id"
+                      value={formData.sap_item_id}
+                      onChange={handleInputChange}
+                      className="w-full px-4 py-2 border rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+                      placeholder="SAP Item ID"
+                    />
+                  </div>
+                  
+                  <div>
+                    <SearchableDropdown
+                      label="Material Type Code *"
+                      options={materialTypes}
+                      value={formData.mat_type_code}
+                      onChange={(value) => setFormData(prev => ({ ...prev, mat_type_code: value || "" }))}
+                      placeholder="Select material type..."
+                      searchPlaceholder="Search material types..."
+                      required
+                      getOptionLabel={(option) => {
+                        if (typeof option === 'string') return option;
+                        return option.mat_type_code ? `${option.mat_type_code} - ${option.mat_type_desc || ''}` : (option.mat_type_desc || String(option));
+                      }}
+                      getOptionValue={(option) => {
+                        if (typeof option === 'string') return option;
+                        return option.mat_type_code || option;
+                      }}
+                    />
+                  </div>
+                  
+                  <div>
+                    <SearchableDropdown
+                      label="Material Group Code *"
+                      options={materialGroups}
+                      value={formData.mgrp_code}
+                      onChange={handleMgrpCodeChange}
+                      placeholder="Select material group..."
+                      searchPlaceholder="Search material groups..."
+                      required
+                      getOptionLabel={(option) => {
+                        if (typeof option === 'string') return option;
+                        return option.mgrp_code ? `${option.mgrp_code} - ${option.mgrp_shortname || option.mgrp_longname || ''}` : (option.mgrp_shortname || option.mgrp_longname || String(option));
+                      }}
+                      getOptionValue={(option) => {
+                        if (typeof option === 'string') return option;
+                        return option.mgrp_code || option;
+                      }}
+                    />
+                  </div>
+                  
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">Search Text</label>
+                    <input
+                      type="text"
+                      name="search_text"
+                      value={formData.search_text}
+                      onChange={handleInputChange}
+                      className="w-full px-4 py-2 border rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+                      placeholder="Search text"
+                    />
+                  </div>
+                  
+                  <div className="md:col-span-2">
+                    <label className="block text-sm font-medium text-gray-700 mb-1">Item Description *</label>
+                    <textarea
+                      name="item_desc"
+                      value={formData.item_desc}
+                      onChange={handleInputChange}
+                      rows={3}
+                      className="w-full px-4 py-2 border rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+                      placeholder="Item description"
+                    />
+                  </div>
+                  
+                  <div className="md:col-span-2">
+                    <label className="block text-sm font-medium text-gray-700 mb-1">Notes</label>
+                    <textarea
+                      name="notes"
+                      value={formData.notes}
+                      onChange={handleInputChange}
+                      rows={2}
+                      className="w-full px-4 py-2 border rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+                      placeholder="Additional notes"
+                    />
                   </div>
                 </div>
               )}
-              
-              <div className="md:col-span-2">
-                <label className="block text-sm font-medium text-gray-700 mb-1">Notes</label>
-                <textarea
-                  name="notes"
-                  value={formData.notes}
-                  onChange={handleInputChange}
-                  rows={2}
-                  className="w-full px-4 py-2 border rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
-                  placeholder="Additional notes"
-                />
-              </div>
+
+              {/* Tab 2: Attributes */}
+              {activeTab === "attributes" && (
+                <div>
+                  {!formData.mgrp_code ? (
+                    <div className="text-center py-8 text-gray-500">
+                      <p>Please select a Material Group in the General Info tab first.</p>
+                    </div>
+                  ) : Object.keys(materialAttributes).length === 0 ? (
+                    <div className="text-center py-8 text-gray-500">
+                      <p>No attributes found for the selected Material Group.</p>
+                    </div>
+                  ) : (
+                    <div className="space-y-4">
+                      {Object.entries(materialAttributes).map(([attrName, attrConfig]) => {
+                        const values = attrConfig.values || [];
+                        const currentValue = formData.attributes[attrName] || "";
+                        return (
+                          <div key={attrName} className="border rounded-lg p-4 bg-gray-50">
+                            <label className="block text-sm font-medium text-gray-700 mb-2">
+                              {attrName}
+                              {attrConfig.uom && (
+                                <span className="ml-2 text-xs text-gray-500">({attrConfig.uom})</span>
+                              )}
+                            </label>
+                            <select
+                              value={currentValue}
+                              onChange={(e) => handleAttributeChange(attrName, e.target.value)}
+                              className="w-full px-4 py-2 border rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 bg-white"
+                            >
+                              <option value="">Select {attrName}</option>
+                              {values.map((value) => (
+                                <option key={value} value={value}>{value}</option>
+                              ))}
+                            </select>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  )}
+                </div>
+              )}
             </div>
 
             <div className="flex justify-end space-x-3 p-6 border-t">

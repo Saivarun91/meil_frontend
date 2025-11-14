@@ -1,131 +1,12 @@
 "use client";
-import { useState, useEffect, useRef } from "react";
+import { useState, useEffect } from "react";
 import {
-  Plus, Edit, Trash2, Search, Settings, Info, Loader2, PlusCircle, X, Eye
+  Plus, Edit, Trash2, Search, Settings, Loader2, PlusCircle, X, Eye
 } from "lucide-react";
 import { fetchMaterialAttributes, createMaterialAttribute, updateMaterialAttribute, deleteMaterialAttribute, fetchMaterialGroups } from "../../../lib/api";
 import {useAuth} from "@/context/AuthContext";
-import BackButton from "@/components/BackButton";
 import SearchableDropdown from "@/components/SearchableDropdown";
 import ViewModal from "@/components/ViewModal";
-
-// Component to display attributes as badges with overflow handling
-function AttributeBadges({ attributes }) {
-  const containerRef = useRef(null);
-  const badgeRefs = useRef({});
-  const [visibleCount, setVisibleCount] = useState(Object.keys(attributes).length);
-
-  useEffect(() => {
-    const calculateVisibleCount = () => {
-      if (!containerRef.current) return;
-      
-      const containerWidth = containerRef.current.offsetWidth;
-      if (containerWidth === 0) return;
-      
-      const attrEntries = Object.entries(attributes);
-      if (attrEntries.length === 0) {
-        setVisibleCount(0);
-        return;
-      }
-      
-      const gap = 8; // gap-2 = 8px
-      const moreBadgeWidth = 55; // Approximate width for "+X" badge
-      let usedWidth = 0;
-      let count = 0;
-      
-      // Try to fit badges one by one
-      for (let i = 0; i < attrEntries.length; i++) {
-        const [attrName] = attrEntries[i];
-        const badgeElement = badgeRefs.current[attrName];
-        
-        if (badgeElement) {
-          const badgeWidth = badgeElement.offsetWidth;
-          const remainingCount = attrEntries.length - i - 1;
-          
-          // Check if we need space for "+X more" badge
-          const neededForMore = remainingCount > 0 ? moreBadgeWidth + gap : 0;
-          
-          if (usedWidth + badgeWidth + gap + neededForMore <= containerWidth) {
-            usedWidth += badgeWidth + gap;
-            count++;
-          } else {
-            // Can't fit this badge, show "+X more" instead
-            break;
-          }
-        } else {
-          // If badge not rendered yet, estimate width
-          const estimatedWidth = Math.max(50, attrName.length * 7 + 24) + gap;
-          const remainingCount = attrEntries.length - i - 1;
-          const neededForMore = remainingCount > 0 ? moreBadgeWidth + gap : 0;
-          
-          if (usedWidth + estimatedWidth + neededForMore <= containerWidth) {
-            usedWidth += estimatedWidth;
-            count++;
-          } else {
-            break;
-          }
-        }
-      }
-      
-      setVisibleCount(Math.max(0, count));
-    };
-
-    // Initial calculation after DOM update
-    const timeoutId = setTimeout(calculateVisibleCount, 50);
-    
-    // Use ResizeObserver for container size changes
-    let resizeObserver;
-    if (containerRef.current && window.ResizeObserver) {
-      resizeObserver = new ResizeObserver(() => {
-        setTimeout(calculateVisibleCount, 10);
-      });
-      resizeObserver.observe(containerRef.current);
-    }
-    
-    window.addEventListener('resize', calculateVisibleCount);
-    
-    return () => {
-      clearTimeout(timeoutId);
-      window.removeEventListener('resize', calculateVisibleCount);
-      if (resizeObserver) {
-        resizeObserver.disconnect();
-      }
-    };
-  }, [attributes]);
-
-  const attrEntries = Object.entries(attributes);
-  const visibleAttributes = attrEntries.slice(0, visibleCount);
-  const hiddenCount = attrEntries.length - visibleCount;
-
-  if (attrEntries.length === 0) {
-    return (
-      <span className="text-sm text-gray-400 italic">No attributes</span>
-    );
-  }
-
-  return (
-    <div ref={containerRef} className="flex flex-wrap items-center gap-2 max-w-full">
-      {visibleAttributes.map(([attrName, attrConfig]) => (
-        <span
-          key={attrName}
-          ref={(el) => badgeRefs.current[attrName] = el}
-          className="inline-flex items-center px-3 py-1.5 rounded-full text-xs font-medium bg-gradient-to-r from-blue-50 to-indigo-50 text-blue-700 border border-blue-200 shadow-sm hover:shadow-md transition-shadow duration-200 whitespace-nowrap"
-          title={`${attrName}: ${attrConfig.values?.join(", ") || "N/A"}`}
-        >
-          {attrName}
-        </span>
-      ))}
-      {hiddenCount > 0 && (
-        <span
-          className="inline-flex items-center px-3 py-1.5 rounded-full text-xs font-semibold bg-gradient-to-r from-gray-100 to-gray-200 text-gray-700 border border-gray-300 shadow-sm cursor-default whitespace-nowrap"
-          title={`${hiddenCount} more attribute${hiddenCount > 1 ? 's' : ''}: ${attrEntries.slice(visibleCount).map(([name]) => name).join(", ")}`}
-        >
-          +{hiddenCount}
-        </span>
-      )}
-    </div>
-  );
-}
 
 export default function MaterialAttributesPage() {
   const [attributes, setAttributes] = useState([]);
@@ -141,18 +22,31 @@ export default function MaterialAttributesPage() {
   const [currentPage, setCurrentPage] = useState(1);
   const [itemsPerPage] = useState(10);
   
+  // For creating multiple attributes at once
   const [formData, setFormData] = useState({
     mgrp_code: "",
-    attributes: {}, // JSON structure: { "Color": { "values": ["Red", "Blue"], "print_priority": 1, ... } }
+    attributes: [], // List of attribute objects: [{ attribute_name, possible_values, uom, print_priority, validation }]
   });
   
   // For adding new attribute in form
   const [newAttrName, setNewAttrName] = useState("");
-  const [newAttrValues, setNewAttrValues] = useState("");
+  const [newAttrValues, setNewAttrValues] = useState([]);
+  const [newAttrValueInput, setNewAttrValueInput] = useState("");
   const [newAttrPrintPriority, setNewAttrPrintPriority] = useState(0);
   const [newAttrValidation, setNewAttrValidation] = useState("");
-  const [newAttrMaxLength, setNewAttrMaxLength] = useState("");
+  const [newAttrHasUOM, setNewAttrHasUOM] = useState(false);
   const [newAttrUnit, setNewAttrUnit] = useState("");
+  
+  // For editing single attribute
+  const [editFormData, setEditFormData] = useState({
+    attribute_name: "",
+    possible_values: [],
+    uom: "",
+    print_priority: 0,
+    validation: "",
+  });
+  const [editHasUOM, setEditHasUOM] = useState(false);
+  const [editValueInput, setEditValueInput] = useState("");
   
   const {user,token,role,checkPermission} = useAuth();
   
@@ -183,8 +77,10 @@ export default function MaterialAttributesPage() {
     try {
       const data = await fetchMaterialGroups(token);
       setMaterialGroups(data || []);
+      console.log("Loaded material groups:", data?.length || 0);
     } catch (err) {
       console.error("Error loading material groups:", err);
+      setError("Failed to load material groups: " + (err.response?.data?.error || err.message));
     }
   };
 
@@ -192,8 +88,9 @@ export default function MaterialAttributesPage() {
   const filteredAttributes = attributes.filter(attribute => {
     const matchesSearch =
       (attribute.mgrp_code || "").toLowerCase().includes(searchTerm.toLowerCase()) ||
-      Object.keys(attribute.attributes || {}).some(key => 
-        key.toLowerCase().includes(searchTerm.toLowerCase())
+      (attribute.attribute_name || "").toLowerCase().includes(searchTerm.toLowerCase()) ||
+      (attribute.possible_values || []).some(value => 
+        value.toLowerCase().includes(searchTerm.toLowerCase())
       );
 
     return matchesSearch;
@@ -214,16 +111,21 @@ export default function MaterialAttributesPage() {
     setEditingAttribute(null);
     setFormData({
       mgrp_code: "",
-      attributes: {},
+      attributes: [],
     });
     setNewAttrName("");
-    setNewAttrValues("");
+    setNewAttrValues([]);
+    setNewAttrValueInput("");
     setNewAttrPrintPriority(0);
     setNewAttrValidation("");
-    setNewAttrMaxLength("");
+    setNewAttrHasUOM(false);
     setNewAttrUnit("");
     setIsModalOpen(true);
     setError(null);
+    // Reload material groups if empty
+    if (materialGroups.length === 0 && token) {
+      loadMaterialGroups();
+    }
   };
 
   const handleView = (attribute) => {
@@ -233,16 +135,16 @@ export default function MaterialAttributesPage() {
 
   const handleEdit = (attribute) => {
     setEditingAttribute(attribute);
-    setFormData({
-      mgrp_code: attribute.mgrp_code || "",
-      attributes: attribute.attributes || {},
+    const hasUOM = !!(attribute.uom && attribute.uom.trim());
+    setEditHasUOM(hasUOM);
+    setEditFormData({
+      attribute_name: attribute.attribute_name || "",
+      possible_values: attribute.possible_values || [],
+      uom: attribute.uom || "",
+      print_priority: attribute.print_priority || 0,
+      validation: attribute.validation || "",
     });
-    setNewAttrName("");
-    setNewAttrValues("");
-    setNewAttrPrintPriority(0);
-    setNewAttrValidation("");
-    setNewAttrMaxLength("");
-    setNewAttrUnit("");
+    setEditValueInput("");
     setIsModalOpen(true);
     setError(null);
   };
@@ -250,30 +152,63 @@ export default function MaterialAttributesPage() {
   const handleCloseModal = () => {
     setIsModalOpen(false);
     setEditingAttribute(null);
+    setEditFormData({
+      attribute_name: "",
+      possible_values: [],
+      uom: "",
+      print_priority: 0,
+      validation: "",
+    });
+    setEditHasUOM(false);
+    setEditValueInput("");
     setError(null);
   };
 
 
+  const addValueToNewAttr = () => {
+    if (!newAttrValueInput.trim()) {
+      setError("Please enter a value");
+      return;
+    }
+    if (newAttrValues.includes(newAttrValueInput.trim())) {
+      setError("This value already exists");
+      return;
+    }
+    setNewAttrValues(prev => [...prev, newAttrValueInput.trim()]);
+    setNewAttrValueInput("");
+    setError(null);
+  };
+
+  const removeValueFromNewAttr = (index) => {
+    setNewAttrValues(prev => prev.filter((_, i) => i !== index));
+  };
+
   const addAttributeToForm = () => {
-    if (!newAttrName || !newAttrValues) {
-      setError("Attribute name and values are required");
+    if (!newAttrName) {
+      setError("Attribute name is required");
       return;
     }
 
-    // Check if unit is required for numeric validation
-    if (newAttrValidation.toLowerCase() === "numeric" && !newAttrUnit) {
-      setError("Unit to measure is required when validation is numeric");
-      return;
-    }
-
-    const valuesArray = newAttrValues.split(",").map(v => v.trim()).filter(v => v);
-    if (valuesArray.length === 0) {
+    if (newAttrValues.length === 0) {
       setError("At least one value is required");
       return;
     }
 
+    // Check if unit is required when UOM is enabled
+    if (newAttrHasUOM && !newAttrUnit) {
+      setError("Unit of Measure is required when UOM is enabled");
+      return;
+    }
+
+    // Check if attribute name already exists in the list
+    if (formData.attributes.some(attr => attr.attribute_name === newAttrName)) {
+      setError("Attribute name already exists in the list");
+      return;
+    }
+
     const newAttr = {
-      values: valuesArray,
+      attribute_name: newAttrName,
+      possible_values: newAttrValues,
       print_priority: parseInt(newAttrPrintPriority) || 0,
     };
 
@@ -281,53 +216,35 @@ export default function MaterialAttributesPage() {
       newAttr.validation = newAttrValidation;
     }
 
-    if (newAttrMaxLength) {
-      newAttr.max_length = parseInt(newAttrMaxLength);
-    }
-
-    // Add unit if validation is numeric
-    if (newAttrValidation.toLowerCase() === "numeric" && newAttrUnit) {
-      newAttr.unit = newAttrUnit;
+    // Add unit if UOM is enabled
+    if (newAttrHasUOM && newAttrUnit) {
+      newAttr.uom = newAttrUnit;
     }
 
     setFormData(prev => ({
       ...prev,
-      attributes: {
-        ...prev.attributes,
-        [newAttrName]: newAttr
-      }
+      attributes: [...prev.attributes, newAttr]
     }));
 
     // Reset form
     setNewAttrName("");
-    setNewAttrValues("");
+    setNewAttrValues([]);
+    setNewAttrValueInput("");
     setNewAttrPrintPriority(0);
     setNewAttrValidation("");
-    setNewAttrMaxLength("");
+    setNewAttrHasUOM(false);
     setNewAttrUnit("");
     setError(null);
   };
 
-  const removeAttributeFromForm = (attrName) => {
-    const newAttributes = { ...formData.attributes };
-    delete newAttributes[attrName];
+  const removeAttributeFromForm = (index) => {
     setFormData(prev => ({
       ...prev,
-      attributes: newAttributes
+      attributes: prev.attributes.filter((_, i) => i !== index)
     }));
   };
 
   const handleSaveAttribute = async () => {
-    if (!formData.mgrp_code) {
-      setError("Material Group Code is required");
-      return;
-    }
-
-    if (Object.keys(formData.attributes).length === 0) {
-      setError("At least one attribute must be defined");
-      return;
-    }
-
     // Check permission before proceeding
     if (editingAttribute) {
       if (!checkPermission("attribute", "update")) {
@@ -345,14 +262,49 @@ export default function MaterialAttributesPage() {
       setSaving(true);
       setError(null);
 
-      const dataToSend = {
-        mgrp_code: formData.mgrp_code,
-        attributes: formData.attributes,
-      };
-
       if (editingAttribute) {
-        await updateMaterialAttribute(token, editingAttribute.attrib_id, dataToSend);
+        // Update single attribute
+        if (!editFormData.attribute_name || !editFormData.possible_values || editFormData.possible_values.length === 0) {
+          setError("Attribute name and at least one value are required");
+          setSaving(false);
+          return;
+        }
+
+        // Check if UOM is required when enabled
+        if (editHasUOM && !editFormData.uom) {
+          setError("Unit of Measure is required when UOM is enabled");
+          setSaving(false);
+          return;
+        }
+
+        const dataToSend = {
+          attribute_name: editFormData.attribute_name,
+          possible_values: editFormData.possible_values,
+          uom: editHasUOM ? (editFormData.uom || null) : null,
+          print_priority: editFormData.print_priority || 0,
+          validation: editFormData.validation || null,
+        };
+
+        await updateMaterialAttribute(token, editingAttribute.id, dataToSend);
       } else {
+        // Create multiple attributes
+        if (!formData.mgrp_code) {
+          setError("Material Group Code is required");
+          setSaving(false);
+          return;
+        }
+
+        if (formData.attributes.length === 0) {
+          setError("At least one attribute must be defined");
+          setSaving(false);
+          return;
+        }
+
+        const dataToSend = {
+          mgrp_code: formData.mgrp_code,
+          attributes: formData.attributes,
+        };
+
         await createMaterialAttribute(token, dataToSend);
       }
 
@@ -366,7 +318,7 @@ export default function MaterialAttributesPage() {
     }
   };
 
-  const handleDelete = async (attrib_id) => {
+  const handleDelete = async (id) => {
     if (window.confirm("Are you sure you want to delete this material attribute? This action cannot be undone.")) {
       // Check permission before proceeding
       if (!checkPermission("attribute", "delete")) {
@@ -376,7 +328,7 @@ export default function MaterialAttributesPage() {
       
       try {
         setError(null);
-        await deleteMaterialAttribute(token, attrib_id);
+        await deleteMaterialAttribute(token, id);
         await loadAttributes();
       } catch (err) {
         setError("Failed to delete material attribute: " + (err.response?.data?.error || err.message));
@@ -441,7 +393,10 @@ export default function MaterialAttributesPage() {
                 <thead>
                   <tr className="bg-gradient-to-r from-purple-600 via-pink-500 to-red-500 text-white uppercase tracking-wide">
                     <th className="px-6 py-4 text-left text-sm font-semibold">Material Group</th>
-                    <th className="px-6 py-4 text-left text-sm font-semibold">Attributes</th>
+                    <th className="px-6 py-4 text-left text-sm font-semibold">Attribute Name</th>
+                    <th className="px-6 py-4 text-left text-sm font-semibold">Possible Values</th>
+                    <th className="px-6 py-4 text-left text-sm font-semibold">UOM</th>
+                    <th className="px-6 py-4 text-left text-sm font-semibold">Priority</th>
                     <th className="px-6 py-4 text-left text-sm font-semibold">Created</th>
                     <th className="px-6 py-4 text-left text-sm font-semibold">Updated</th>
                     <th className="px-6 py-4 text-left text-sm font-semibold">Actions</th>
@@ -453,7 +408,7 @@ export default function MaterialAttributesPage() {
                   {currentAttributes.length > 0 ? (
                     currentAttributes.map((attribute, index) => (
                       <tr
-                        key={attribute.attrib_id}
+                        key={attribute.id}
                         className={`transition-all duration-300 hover:bg-purple-50 ${
                           index % 2 === 0 ? "bg-gray-50" : "bg-gray-100"
                         }`}
@@ -464,7 +419,40 @@ export default function MaterialAttributesPage() {
                           </div>
                         </td>
                         <td className="px-6 py-4">
-                          <AttributeBadges attributes={attribute.attributes || {}} />
+                          <div className="text-sm font-semibold text-gray-900">
+                            {attribute.attribute_name}
+                          </div>
+                        </td>
+                        <td className="px-6 py-4">
+                          <div className="flex flex-wrap gap-1">
+                            {attribute.possible_values && attribute.possible_values.length > 0 ? (
+                              attribute.possible_values.slice(0, 3).map((value, idx) => (
+                                <span
+                                  key={idx}
+                                  className="inline-flex items-center px-2 py-1 rounded-full text-xs font-medium bg-blue-50 text-blue-700 border border-blue-200"
+                                >
+                                  {value}
+                                </span>
+                              ))
+                            ) : (
+                              <span className="text-sm text-gray-400 italic">No values</span>
+                            )}
+                            {attribute.possible_values && attribute.possible_values.length > 3 && (
+                              <span className="inline-flex items-center px-2 py-1 rounded-full text-xs font-medium bg-gray-100 text-gray-600">
+                                +{attribute.possible_values.length - 3} more
+                              </span>
+                            )}
+                          </div>
+                        </td>
+                        <td className="px-6 py-4">
+                          <div className="text-sm text-gray-600">
+                            {attribute.uom || '-'}
+                          </div>
+                        </td>
+                        <td className="px-6 py-4">
+                          <div className="text-sm text-gray-600">
+                            {attribute.print_priority || 0}
+                          </div>
                         </td>
                         <td className="px-6 py-4">
                           <div className="text-sm text-gray-500">
@@ -496,7 +484,7 @@ export default function MaterialAttributesPage() {
                             )}
                             {checkPermission("attribute", "delete") && (
                               <button
-                                onClick={() => handleDelete(attribute.attrib_id)}
+                                onClick={() => handleDelete(attribute.id)}
                                 className="text-red-600 hover:text-red-800 p-2 rounded-full hover:bg-red-100 transition duration-200"
                                 title="Delete"
                               >
@@ -509,7 +497,7 @@ export default function MaterialAttributesPage() {
                     ))
                   ) : (
                     <tr>
-                      <td colSpan="5" className="px-6 py-12 text-center">
+                      <td colSpan="8" className="px-6 py-12 text-center">
                         <div className="flex flex-col items-center justify-center text-gray-400">
                           <Settings size={48} className="mb-4 opacity-50" />
                           <p className="text-lg font-medium text-gray-500 mb-1">
@@ -624,72 +612,147 @@ export default function MaterialAttributesPage() {
                 </div>
               )}
               
-              {/* Material Group Selection */}
-              <div>
-                <SearchableDropdown
-                  label="Material Group Code *"
-                  options={materialGroups}
-                  value={formData.mgrp_code}
-                  onChange={(value) => setFormData(prev => ({ ...prev, mgrp_code: value || "" }))}
-                  placeholder="Select material group..."
-                  searchPlaceholder="Search material groups..."
-                  required
-                  getOptionLabel={(option) => {
-                    if (typeof option === 'string') return option;
-                    return option.mgrp_code ? `${option.mgrp_code} - ${option.mgrp_shortname || option.mgrp_longname || ''}` : (option.mgrp_shortname || option.mgrp_longname || String(option));
-                  }}
-                  getOptionValue={(option) => {
-                    if (typeof option === 'string') return option;
-                    return option.mgrp_code || option;
-                  }}
-                />
-              </div>
-
-              {/* Add New Attribute Form */}
-              <div className="border rounded-lg p-4 bg-gray-50">
-                <h3 className="text-lg font-semibold text-gray-800 mb-4">Add New Attribute</h3>
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              {editingAttribute ? (
+                /* Edit Single Attribute */
+                <div className="space-y-4">
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">Material Group</label>
+                    <input
+                      type="text"
+                      value={editingAttribute.mgrp_code || ''}
+                      disabled
+                      className="w-full px-4 py-2 border rounded-lg bg-gray-100 text-gray-600"
+                    />
+                  </div>
+                  
                   <div>
                     <label className="block text-sm font-medium text-gray-700 mb-1">Attribute Name *</label>
                     <input
                       type="text"
-                      value={newAttrName}
-                      onChange={(e) => setNewAttrName(e.target.value)}
+                      value={editFormData.attribute_name}
+                      onChange={(e) => setEditFormData(prev => ({ ...prev, attribute_name: e.target.value }))}
                       className="w-full px-4 py-2 border rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
                       placeholder="e.g., Color"
                     />
                   </div>
+                  
                   <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-1">Values (comma-separated) *</label>
-                    <input
-                      type="text"
-                      value={newAttrValues}
-                      onChange={(e) => setNewAttrValues(e.target.value)}
-                      className="w-full px-4 py-2 border rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
-                      placeholder="e.g., Red, Blue, Green"
-                    />
+                    <label className="block text-sm font-medium text-gray-700 mb-1">Possible Values *</label>
+                    <div className="flex gap-2 mb-2">
+                      <input
+                        type="text"
+                        value={editValueInput}
+                        onChange={(e) => setEditValueInput(e.target.value)}
+                        onKeyPress={(e) => {
+                          if (e.key === 'Enter') {
+                            e.preventDefault();
+                            if (editValueInput.trim() && !editFormData.possible_values.includes(editValueInput.trim())) {
+                              setEditFormData(prev => ({ ...prev, possible_values: [...prev.possible_values, editValueInput.trim()] }));
+                              setEditValueInput("");
+                            }
+                          }
+                        }}
+                        className="flex-1 px-4 py-2 border rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+                        placeholder="Enter a value and press Enter or click Add"
+                      />
+                      <button
+                        type="button"
+                        onClick={() => {
+                          if (editValueInput.trim() && !editFormData.possible_values.includes(editValueInput.trim())) {
+                            setEditFormData(prev => ({ ...prev, possible_values: [...prev.possible_values, editValueInput.trim()] }));
+                            setEditValueInput("");
+                          }
+                        }}
+                        className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700"
+                      >
+                        Add
+                      </button>
+                    </div>
+                    {editFormData.possible_values.length > 0 && (
+                      <div className="flex flex-wrap gap-2">
+                        {editFormData.possible_values.map((value, index) => (
+                          <span
+                            key={index}
+                            className="inline-flex items-center px-3 py-1 bg-blue-100 text-blue-800 rounded-full text-sm"
+                          >
+                            {value}
+                            <button
+                              type="button"
+                              onClick={() => {
+                                setEditFormData(prev => ({
+                                  ...prev,
+                                  possible_values: prev.possible_values.filter((_, i) => i !== index)
+                                }));
+                              }}
+                              className="ml-2 text-blue-600 hover:text-blue-800"
+                            >
+                              <X size={14} />
+                            </button>
+                          </span>
+                        ))}
+                      </div>
+                    )}
                   </div>
+                  
                   <div>
                     <label className="block text-sm font-medium text-gray-700 mb-1">Print Priority</label>
                     <input
                       type="number"
-                      value={newAttrPrintPriority}
-                      onChange={(e) => setNewAttrPrintPriority(parseInt(e.target.value) || 0)}
+                      value={editFormData.print_priority}
+                      onChange={(e) => setEditFormData(prev => ({ ...prev, print_priority: parseInt(e.target.value) || 0 }))}
                       className="w-full px-4 py-2 border rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
                       placeholder="0"
                     />
                   </div>
+                  
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-2">Unit of Measure (UOM)</label>
+                    <div className="flex items-center space-x-4 mb-3">
+                      <label className="flex items-center">
+                        <input
+                          type="radio"
+                          name="editUOM"
+                          checked={editHasUOM === true}
+                          onChange={() => {
+                            setEditHasUOM(true);
+                            if (!editFormData.uom) {
+                              setEditFormData(prev => ({ ...prev, uom: "" }));
+                            }
+                          }}
+                          className="mr-2"
+                        />
+                        <span className="text-sm text-gray-700">Yes</span>
+                      </label>
+                      <label className="flex items-center">
+                        <input
+                          type="radio"
+                          name="editUOM"
+                          checked={editHasUOM === false}
+                          onChange={() => {
+                            setEditHasUOM(false);
+                            setEditFormData(prev => ({ ...prev, uom: "" }));
+                          }}
+                          className="mr-2"
+                        />
+                        <span className="text-sm text-gray-700">No</span>
+                      </label>
+                    </div>
+                    {editHasUOM && (
+                      <input
+                        type="text"
+                        value={editFormData.uom}
+                        onChange={(e) => setEditFormData(prev => ({ ...prev, uom: e.target.value }))}
+                        className="w-full px-4 py-2 border rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+                        placeholder="e.g., kg, m, cm, liters"
+                      />
+                    )}
+                  </div>
+                  
                   <div>
                     <label className="block text-sm font-medium text-gray-700 mb-1">Validation</label>
                     <select
-                      value={newAttrValidation}
-                      onChange={(e) => {
-                        setNewAttrValidation(e.target.value);
-                        // Clear unit if validation is not numeric
-                        if (e.target.value.toLowerCase() !== "numeric") {
-                          setNewAttrUnit("");
-                        }
-                      }}
+                      value={editFormData.validation}
+                      onChange={(e) => setEditFormData(prev => ({ ...prev, validation: e.target.value }))}
                       className="w-full px-4 py-2 border rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
                     >
                       <option value="">Select validation type</option>
@@ -698,72 +761,203 @@ export default function MaterialAttributesPage() {
                       <option value="alphanumeric">Alphanumeric</option>
                     </select>
                   </div>
-                  {newAttrValidation.toLowerCase() === "numeric" && (
-                    <div>
-                      <label className="block text-sm font-medium text-gray-700 mb-1">Unit to Measure *</label>
-                      <input
-                        type="text"
-                        value={newAttrUnit}
-                        onChange={(e) => setNewAttrUnit(e.target.value)}
-                        className="w-full px-4 py-2 border rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
-                        placeholder="e.g., kg, m, cm, liters"
-                      />
-                    </div>
-                  )}
-                  <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-1">Max Length</label>
-                    <input
-                      type="number"
-                      value={newAttrMaxLength}
-                      onChange={(e) => setNewAttrMaxLength(e.target.value)}
-                      className="w-full px-4 py-2 border rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
-                      placeholder="e.g., 10"
-                    />
-                  </div>
-                  <div className="flex items-end">
-                    <button
-                      onClick={addAttributeToForm}
-                      className="w-full px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 flex items-center justify-center"
-                    >
-                      <Plus size={18} className="mr-2" />
-                      Add Attribute
-                    </button>
-                  </div>
                 </div>
-              </div>
+              ) : (
+                /* Create Multiple Attributes */
+                <>
+                  {/* Material Group Selection */}
+                  <div>
+                    <SearchableDropdown
+                      label="Material Group Code *"
+                      options={materialGroups}
+                      value={formData.mgrp_code}
+                      onChange={(value) => setFormData(prev => ({ ...prev, mgrp_code: value || "" }))}
+                      placeholder={materialGroups.length === 0 ? "Loading material groups..." : "Select material group..."}
+                      searchPlaceholder="Search material groups..."
+                      required
+                      getOptionLabel={(option) => {
+                        if (typeof option === 'string') return option;
+                        return option.mgrp_code ? `${option.mgrp_code} - ${option.mgrp_shortname || option.mgrp_longname || ''}` : (option.mgrp_shortname || option.mgrp_longname || String(option));
+                      }}
+                      getOptionValue={(option) => {
+                        if (typeof option === 'string') return option;
+                        return option.mgrp_code || option;
+                      }}
+                    />
+                    {materialGroups.length === 0 && (
+                      <p className="mt-1 text-sm text-gray-500">No material groups available. Please ensure material groups are created first.</p>
+                    )}
+                  </div>
+                  
 
-              {/* Existing Attributes */}
-              {Object.keys(formData.attributes).length > 0 && (
-                <div>
-                  <h3 className="text-lg font-semibold text-gray-800 mb-4">Defined Attributes</h3>
-                  <div className="space-y-3">
-                    {Object.entries(formData.attributes).map(([attrName, attrConfig]) => (
-                      <div key={attrName} className="border rounded-lg p-4 bg-white">
-                        <div className="flex justify-between items-start mb-2">
-                          <div>
-                            <div className="font-semibold text-gray-900">{attrName}</div>
-                            <div className="text-sm text-gray-600 mt-1">
-                              Values: {attrConfig.values?.join(", ") || "N/A"}
-                            </div>
-                            <div className="text-xs text-gray-500 mt-1">
-                              Priority: {attrConfig.print_priority || 0}
-                              {attrConfig.validation && ` | Validation: ${attrConfig.validation}`}
-                              {attrConfig.unit && ` | Unit: ${attrConfig.unit}`}
-                              {attrConfig.max_length && ` | Max Length: ${attrConfig.max_length}`}
-                            </div>
-                          </div>
+                  {/* Add New Attribute Form */}
+                  <div className="border rounded-lg p-4 bg-gray-50">
+                    <h3 className="text-lg font-semibold text-gray-800 mb-4">Add New Attribute</h3>
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                      <div>
+                        <label className="block text-sm font-medium text-gray-700 mb-1">Attribute Name *</label>
+                        <input
+                          type="text"
+                          value={newAttrName}
+                          onChange={(e) => setNewAttrName(e.target.value)}
+                          className="w-full px-4 py-2 border rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+                          placeholder="e.g., Color"
+                        />
+                      </div>
+                      <div>
+                        <label className="block text-sm font-medium text-gray-700 mb-1">Values *</label>
+                        <div className="flex gap-2 mb-2">
+                          <input
+                            type="text"
+                            value={newAttrValueInput}
+                            onChange={(e) => setNewAttrValueInput(e.target.value)}
+                            onKeyPress={(e) => {
+                              if (e.key === 'Enter') {
+                                e.preventDefault();
+                                addValueToNewAttr();
+                              }
+                            }}
+                            className="flex-1 px-4 py-2 border rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+                            placeholder="Enter a value and press Enter or click Add"
+                          />
                           <button
-                            onClick={() => removeAttributeFromForm(attrName)}
-                            className="text-red-600 hover:text-red-800 p-1 rounded-full hover:bg-red-50"
-                            title="Remove"
+                            type="button"
+                            onClick={addValueToNewAttr}
+                            className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700"
                           >
-                            <X size={18} />
+                            Add
                           </button>
                         </div>
+                        {newAttrValues.length > 0 && (
+                          <div className="flex flex-wrap gap-2">
+                            {newAttrValues.map((value, index) => (
+                              <span
+                                key={index}
+                                className="inline-flex items-center px-3 py-1 bg-blue-100 text-blue-800 rounded-full text-sm"
+                              >
+                                {value}
+                                <button
+                                  type="button"
+                                  onClick={() => removeValueFromNewAttr(index)}
+                                  className="ml-2 text-blue-600 hover:text-blue-800"
+                                >
+                                  <X size={14} />
+                                </button>
+                              </span>
+                            ))}
+                          </div>
+                        )}
                       </div>
-                    ))}
+                      <div>
+                        <label className="block text-sm font-medium text-gray-700 mb-1">Print Priority</label>
+                        <input
+                          type="number"
+                          value={newAttrPrintPriority}
+                          onChange={(e) => setNewAttrPrintPriority(parseInt(e.target.value) || 0)}
+                          className="w-full px-4 py-2 border rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+                          placeholder="0"
+                        />
+                      </div>
+                      <div>
+                        <label className="block text-sm font-medium text-gray-700 mb-1">Validation</label>
+                        <select
+                          value={newAttrValidation}
+                          onChange={(e) => setNewAttrValidation(e.target.value)}
+                          className="w-full px-4 py-2 border rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+                        >
+                          <option value="">Select validation type</option>
+                          <option value="alpha">Alpha</option>
+                          <option value="numeric">Numeric</option>
+                          <option value="alphanumeric">Alphanumeric</option>
+                        </select>
+                      </div>
+                      <div>
+                        <label className="block text-sm font-medium text-gray-700 mb-2">Unit of Measure (UOM)</label>
+                        <div className="flex items-center space-x-4 mb-3">
+                          <label className="flex items-center">
+                            <input
+                              type="radio"
+                              name="newUOM"
+                              checked={newAttrHasUOM === true}
+                              onChange={() => {
+                                setNewAttrHasUOM(true);
+                                if (!newAttrUnit) {
+                                  setNewAttrUnit("");
+                                }
+                              }}
+                              className="mr-2"
+                            />
+                            <span className="text-sm text-gray-700">Yes</span>
+                          </label>
+                          <label className="flex items-center">
+                            <input
+                              type="radio"
+                              name="newUOM"
+                              checked={newAttrHasUOM === false}
+                              onChange={() => {
+                                setNewAttrHasUOM(false);
+                                setNewAttrUnit("");
+                              }}
+                              className="mr-2"
+                            />
+                            <span className="text-sm text-gray-700">No</span>
+                          </label>
+                        </div>
+                        {newAttrHasUOM && (
+                          <input
+                            type="text"
+                            value={newAttrUnit}
+                            onChange={(e) => setNewAttrUnit(e.target.value)}
+                            className="w-full px-4 py-2 border rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+                            placeholder="e.g., kg, m, cm, liters"
+                          />
+                        )}
+                      </div>
+                      <div className="flex items-end">
+                        <button
+                          onClick={addAttributeToForm}
+                          className="w-full px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 flex items-center justify-center"
+                        >
+                          <Plus size={18} className="mr-2" />
+                          Add Attribute
+                        </button>
+                      </div>
+                    </div>
                   </div>
-                </div>
+
+                  {/* Existing Attributes */}
+                  {formData.attributes.length > 0 && (
+                    <div>
+                      <h3 className="text-lg font-semibold text-gray-800 mb-4">Defined Attributes</h3>
+                      <div className="space-y-3">
+                        {formData.attributes.map((attr, index) => (
+                          <div key={index} className="border rounded-lg p-4 bg-white">
+                            <div className="flex justify-between items-start mb-2">
+                              <div>
+                                <div className="font-semibold text-gray-900">{attr.attribute_name}</div>
+                                <div className="text-sm text-gray-600 mt-1">
+                                  Values: {attr.possible_values?.join(", ") || "N/A"}
+                                </div>
+                                <div className="text-xs text-gray-500 mt-1">
+                                  Priority: {attr.print_priority || 0}
+                                  {attr.validation && ` | Validation: ${attr.validation}`}
+                                  {attr.uom && ` | UOM: ${attr.uom}`}
+                                </div>
+                              </div>
+                              <button
+                                onClick={() => removeAttributeFromForm(index)}
+                                className="text-red-600 hover:text-red-800 p-1 rounded-full hover:bg-red-50"
+                                title="Remove"
+                              >
+                                <X size={18} />
+                              </button>
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+                </>
               )}
             </div>
 
@@ -777,11 +971,17 @@ export default function MaterialAttributesPage() {
               </button>
               <button
                 onClick={handleSaveAttribute}
-                disabled={saving || !formData.mgrp_code || Object.keys(formData.attributes).length === 0}
+                disabled={
+                  saving || 
+                  (editingAttribute 
+                    ? (!editFormData.attribute_name || !editFormData.possible_values || editFormData.possible_values.length === 0)
+                    : (!formData.mgrp_code || formData.attributes.length === 0)
+                  )
+                }
                 className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:opacity-50 flex items-center"
               >
                 {saving && <Loader2 className="h-4 w-4 animate-spin mr-2" />}
-                {editingAttribute ? "Save Changes" : "Add Attribute"}
+                {editingAttribute ? "Save Changes" : "Add Attributes"}
               </button>
             </div>
           </div>
@@ -798,11 +998,17 @@ export default function MaterialAttributesPage() {
         data={viewingAttribute}
         title="View Material Attribute Details"
         fieldLabels={{
-          attrib_id: "Attribute ID",
+          id: "Attribute ID",
           mgrp_code: "Material Group Code",
-          attributes: "Attributes",
+          attribute_name: "Attribute Name",
+          possible_values: "Possible Values",
+          uom: "Unit of Measure",
+          print_priority: "Print Priority",
+          validation: "Validation",
           created: "Created",
-          updated: "Updated"
+          updated: "Updated",
+          createdby: "Created By",
+          updatedby: "Updated By"
         }}
       />
     </div>
