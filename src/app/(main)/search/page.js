@@ -3,17 +3,20 @@ import { useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
 import { createRequest, fetchProjects } from "@/lib/api";
 import { useAuth } from "@/context/AuthContext";
+import SearchableDropdown from "@/components/SearchableDropdown";
 import { Loader2 } from "lucide-react";
 
 export default function MaterialSearchPage() {
   // Section 1 states (existing)
   const [searchTerm, setSearchTerm] = useState("");
-  const [selectedType, setSelectedType] = useState("material");
   const [selectedGroup, setSelectedGroup] = useState("");
   const router = useRouter();
 
   // Section 2 states
   const [searchTab, setSearchTab] = useState("freeText"); // "freeText", "drillDown", "materialGroup"
+
+  // Search type filter - maps to MatGroup.search_type
+  const [searchType, setSearchType] = useState(""); // "service", "Materials", "spares", or "" for all
 
   // Free text search states
   const [freeTextQuery, setFreeTextQuery] = useState("");
@@ -32,6 +35,8 @@ export default function MaterialSearchPage() {
 
   // Material group search states
   const [materialGroupCode, setMaterialGroupCode] = useState("");
+  const [similarMaterialGroups, setSimilarMaterialGroups] = useState([]);
+  const [loadingSimilarGroups, setLoadingSimilarGroups] = useState(false);
 
   // Request modal states
   const [isRequestModalOpen, setIsRequestModalOpen] = useState(false);
@@ -101,7 +106,10 @@ export default function MaterialSearchPage() {
       }
       setDrillDownLoading(true);
       try {
-        const res = await fetch(`${process.env.NEXT_PUBLIC_API_BASE_URL}/api/matgroups/super-groups/${selectedSuperGroup}/material-groups/`);
+        const url = searchType 
+        ? `${process.env.NEXT_PUBLIC_API_BASE_URL}/api/matgroups/super-groups/${selectedSuperGroup}/material-groups/?search_type=${searchType}`
+        : `${process.env.NEXT_PUBLIC_API_BASE_URL}/api/matgroups/super-groups/${selectedSuperGroup}/material-groups/`;
+      const res = await fetch(url);
         if (res.ok) {
           const data = await res.json();
           setMaterialGroupsBySuper(data);
@@ -119,7 +127,7 @@ export default function MaterialSearchPage() {
     if (searchTab === "drillDown" && selectedSuperGroup) {
       fetchMaterialGroups();
     }
-  }, [selectedSuperGroup, searchTab]);
+  }, [selectedSuperGroup, searchTab, searchType]);
 
   // Filter material groups based on search term
   const filteredMaterialGroups = materialGroupsBySuper.filter((group) => {
@@ -137,14 +145,28 @@ export default function MaterialSearchPage() {
     if (!freeTextQuery.trim()) return;
     setFreeTextLoading(true);
     try {
+      const body = { query: freeTextQuery };
+      if (searchType) {
+        body.search_type = searchType;
+      }
       const res = await fetch(`${process.env.NEXT_PUBLIC_API_BASE_URL}/api/matgroups/search/`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ query: freeTextQuery })
+        body: JSON.stringify(body)
       });
       if (res.ok) {
         const data = await res.json();
-        setFreeTextResults(data);
+        // Deduplicate by mgrp_code - keep only the first occurrence (highest rank)
+        const seen = new Set();
+        const uniqueResults = data.filter((group) => {
+          const code = group.mgrp_code ?? group.code;
+          if (seen.has(code)) {
+            return false;
+          }
+          seen.add(code);
+          return true;
+        });
+        setFreeTextResults(uniqueResults);
       } else {
         setFreeTextResults([]);
       }
@@ -176,6 +198,58 @@ export default function MaterialSearchPage() {
       router.push(`/materials/${materialGroupCode.trim()}`);
     }
   };
+
+  // Fetch similar material groups as user types
+  useEffect(() => {
+    const fetchSimilarGroups = async () => {
+      if (!materialGroupCode.trim() || materialGroupCode.trim().length < 2) {
+        setSimilarMaterialGroups([]);
+        return;
+      }
+
+      setLoadingSimilarGroups(true);
+      try {
+        const body = { query: materialGroupCode };
+        if (searchType) {
+          body.search_type = searchType;
+        }
+        const res = await fetch(`${process.env.NEXT_PUBLIC_API_BASE_URL}/api/matgroups/search/`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(body)
+        });
+        if (res.ok) {
+          const data = await res.json();
+          // Deduplicate and limit to top 5 results
+          const seen = new Set();
+          const uniqueResults = data
+            .filter((group) => {
+              const code = group.mgrp_code ?? group.code;
+              if (seen.has(code)) {
+                return false;
+              }
+              seen.add(code);
+              return true;
+            })
+            .slice(0, 5);
+          setSimilarMaterialGroups(uniqueResults);
+        } else {
+          setSimilarMaterialGroups([]);
+        }
+      } catch (err) {
+        console.error("Error fetching similar groups:", err);
+        setSimilarMaterialGroups([]);
+      } finally {
+        setLoadingSimilarGroups(false);
+      }
+    };
+
+    const debounceTimer = setTimeout(() => {
+      fetchSimilarGroups();
+    }, 300); // Debounce for 300ms
+
+    return () => clearTimeout(debounceTimer);
+  }, [materialGroupCode]);
 
   // Load projects for request modal
   useEffect(() => {
@@ -273,12 +347,12 @@ export default function MaterialSearchPage() {
                     <label className="flex items-center space-x-2">
                       <input
                         type="radio"
-                        name="type"
+                        name="searchType"
                         className="h-4 w-4 text-blue-600 focus:ring-blue-500 border-gray-300"
-                        checked={selectedType === "material"}
-                        onChange={() => setSelectedType("material")}
+                        checked={searchType === "Materials"}
+                        onChange={() => setSearchType("Materials")}
                       />
-                      <span className="text-gray-700">Material</span>
+                      <span className="text-gray-700">Materials</span>
                     </label>
                   </div>
                   <div className="mb-2">
@@ -286,10 +360,10 @@ export default function MaterialSearchPage() {
                     <label className="flex items-center space-x-2">
                       <input
                         type="radio"
-                        name="type"
+                        name="searchType"
                         className="h-4 w-4 text-blue-600 focus:ring-blue-500 border-gray-300"
-                        checked={selectedType === "service"}
-                        onChange={() => setSelectedType("service")}
+                        checked={searchType === "service"}
+                        onChange={() => setSearchType("service")}
                       />
                       <span className="text-gray-700">Service</span>
                     </label>
@@ -298,12 +372,24 @@ export default function MaterialSearchPage() {
                     <label className="flex items-center space-x-2">
                       <input
                         type="radio"
-                        name="type"
+                        name="searchType"
                         className="h-4 w-4 text-blue-600 focus:ring-blue-500 border-gray-300"
-                        checked={selectedType === "spares"}
-                        onChange={() => setSelectedType("spares")}
+                        checked={searchType === "spares"}
+                        onChange={() => setSearchType("spares")}
                       />
                       <span className="text-gray-700">Spares</span>
+                    </label>
+                  </div>
+                  <div className="mb-2">
+                    <label className="flex items-center space-x-2">
+                      <input
+                        type="radio"
+                        name="searchType"
+                        className="h-4 w-4 text-blue-600 focus:ring-blue-500 border-gray-300"
+                        checked={searchType === ""}
+                        onChange={() => setSearchType("")}
+                      />
+                      <span className="text-gray-700">All</span>
                     </label>
                   </div>
                 </div>
@@ -371,10 +457,10 @@ export default function MaterialSearchPage() {
             <div className="mb-4">
               {searchTab === "freeText" && (
                 <>
-                  <label htmlFor="free-text-description" className="block text-sm font-medium text-gray-700 mb-2">Description</label>
+                  <label htmlFor="free-text-description" className="block text-sm font-medium text-gray-700 mb-2">Search Query</label>
                   <textarea
                     id="free-text-description"
-                    placeholder="Enter material description here..."
+                    placeholder="Enter search query (searches in short name, long name, search text, etc.)..."
                     value={freeTextQuery}
                     onChange={(e) => setFreeTextQuery(e.target.value)}
                     className="w-full h-32 p-3 border border-gray-300 rounded-md resize-none shadow-sm focus:ring-blue-500 focus:border-blue-500"
@@ -447,19 +533,45 @@ export default function MaterialSearchPage() {
               {searchTab === "materialGroup" && (
                 <>
                   <label htmlFor="material-group-code" className="block text-sm font-medium text-gray-700 mb-2">Material Group Code</label>
-                  <input
-                    id="material-group-code"
-                    type="text"
-                    placeholder="Enter material group code..."
-                    value={materialGroupCode}
-                    onChange={(e) => setMaterialGroupCode(e.target.value)}
-                    onKeyPress={(e) => {
-                      if (e.key === "Enter") {
-                        handleMaterialGroupSearch();
-                      }
-                    }}
-                    className="w-full p-3 border border-gray-300 rounded-md shadow-sm focus:ring-blue-500 focus:border-blue-500"
-                  />
+                  <div className="relative">
+                    <input
+                      id="material-group-code"
+                      type="text"
+                      placeholder="Enter material group code..."
+                      value={materialGroupCode}
+                      onChange={(e) => setMaterialGroupCode(e.target.value)}
+                      onKeyPress={(e) => {
+                        if (e.key === "Enter") {
+                          handleMaterialGroupSearch();
+                        }
+                      }}
+                      className="w-full p-3 border border-gray-300 rounded-md shadow-sm focus:ring-blue-500 focus:border-blue-500"
+                    />
+                    {/* Similar Groups Helper */}
+                    {similarMaterialGroups.length > 0 && materialGroupCode.trim().length >= 2 && (
+                      <div className="absolute z-10 w-full mt-1 bg-white border border-gray-300 rounded-md shadow-lg max-h-60 overflow-y-auto">
+                        <div className="p-2 text-xs font-semibold text-gray-500 bg-gray-50 border-b">Similar Material Groups</div>
+                        {similarMaterialGroups.map((group) => {
+                          const code = group.mgrp_code ?? group.code;
+                          const name = group.notes || group.mgrp_shortname || group.mgrp_longname || "";
+                          return (
+                            <div
+                              key={code}
+                              onClick={() => {
+                                setMaterialGroupCode(code);
+                                setSimilarMaterialGroups([]);
+                                handleMaterialGroupSearch();
+                              }}
+                              className="p-2 hover:bg-blue-50 cursor-pointer border-b border-gray-100 last:border-b-0"
+                            >
+                              <div className="font-semibold text-sm text-blue-700">{code}</div>
+                              {name && <div className="text-xs text-gray-600">{name}</div>}
+                            </div>
+                          );
+                        })}
+                      </div>
+                    )}
+                  </div>
                   <div className="flex space-x-4 mt-4">
                     <button
                       onClick={handleMaterialGroupSearch}
@@ -472,7 +584,10 @@ export default function MaterialSearchPage() {
                       Search
                     </button>
                     <button
-                      onClick={() => setMaterialGroupCode("")}
+                      onClick={() => {
+                        setMaterialGroupCode("");
+                        setSimilarMaterialGroups([]);
+                      }}
                       className="bg-gray-200 text-gray-700 py-2 px-6 rounded-md shadow hover:bg-gray-300"
                     >
                       Clear
@@ -543,7 +658,7 @@ export default function MaterialSearchPage() {
                     <div className="p-4 text-center text-gray-500">
                       {freeTextQuery.trim()
                         ? "No material groups found. Try a different search term."
-                        : "Enter a description and click Search."}
+                        : "Enter a search query and click Search."}
                     </div>
                   )}
                 </div>

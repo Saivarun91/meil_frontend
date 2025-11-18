@@ -39,8 +39,8 @@ export default function MaterialGroupsPage() {
     mgrp_shortname: "",
     mgrp_longname: "",
     sgrp_code: "",
-    is_service: false,
-    attribgrpid: "",
+    search_type: "Materials",
+    // attribgrpid: "",
     notes: "",
   };
   
@@ -88,7 +88,8 @@ export default function MaterialGroupsPage() {
       (group.mgrp_shortname || "").toLowerCase().includes(searchTerm.toLowerCase()) ||
       (group.mgrp_longname || "").toLowerCase().includes(searchTerm.toLowerCase()) ||
       (group.mgrp_code || "").toLowerCase().includes(searchTerm.toLowerCase()) ||
-      (group.notes || "").toLowerCase().includes(searchTerm.toLowerCase());
+      (group.notes || "").toLowerCase().includes(searchTerm.toLowerCase()) ||
+      (group.search_type || "").toLowerCase().includes(searchTerm.toLowerCase());
 
     return matchesSearch;
   });
@@ -148,7 +149,7 @@ export default function MaterialGroupsPage() {
       mgrp_shortname: group.mgrp_shortname,
       mgrp_longname: group.mgrp_longname,
       sgrp_code: group.sgrp_code?.sgrp_code || group.sgrp_code || "",
-      is_service: group.is_service,
+      search_type: group.search_type || "Materials",
       attribgrpid: group.attribgrpid || "",
       notes: group.notes || "",
     });
@@ -159,6 +160,7 @@ export default function MaterialGroupsPage() {
   const handleCloseModal = () => {
     setIsModalOpen(false);
     setEditingGroup(null);
+    setFormData(formDataDefaults);
     setError(null);
   };
 
@@ -293,7 +295,7 @@ export default function MaterialGroupsPage() {
         <th className="px-6 py-4 text-left text-sm font-semibold">Short Name</th>
         <th className="px-6 py-4 text-left text-sm font-semibold">Long Name</th>
         <th className="px-6 py-4 text-left text-sm font-semibold">Super Group</th>
-        <th className="px-6 py-4 text-left text-sm font-semibold">Service</th>
+        <th className="px-6 py-4 text-left text-sm font-semibold">Search Type</th>
         <th
           className="px-6 py-4 text-left text-sm font-semibold cursor-pointer select-none hover:brightness-110 transition-all duration-300"
           onClick={() => handleSort('created')}
@@ -338,19 +340,16 @@ export default function MaterialGroupsPage() {
             <td className="px-6 py-4">
               <span
                 className={`inline-flex items-center px-3 py-1 rounded-full text-xs font-semibold ${
-                  group.is_service
+                  group.search_type === "service"
+                    ? "bg-blue-100 text-blue-800"
+                    : group.search_type === "Materials"
                     ? "bg-green-100 text-green-800"
+                    : group.search_type === "spares"
+                    ? "bg-purple-100 text-purple-800"
                     : "bg-gray-200 text-gray-800"
                 }`}
               >
-                {group.is_service ? (
-                  <>
-                    <CheckCircle className="w-4 h-4 mr-1" />
-                    Yes
-                  </>
-                ) : (
-                  "No"
-                )}
+                {group.search_type || "Materials"}
               </span>
             </td>
             <td className="px-6 py-4">
@@ -604,7 +603,7 @@ export default function MaterialGroupsPage() {
                 />
               </div>
               
-              <div>
+              {/* <div>
                 <label className="block text-sm font-medium text-gray-700 mb-1">Attribute Group ID</label>
                 <input
                   type="text"
@@ -614,19 +613,22 @@ export default function MaterialGroupsPage() {
                   className="w-full px-4 py-2.5 border rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all"
                   placeholder="ATTR-001"
                 />
-              </div>
+              </div> */}
               
-              <div className="flex items-center md:col-span-2">
-                <input
-                  type="checkbox"
-                  name="is_service"
-                  checked={formData.is_service}
-                  onChange={handleInputChange}
-                  className="h-4 w-4 text-blue-600 focus:ring-blue-500 border-gray-300 rounded"
-                />
-                <label className="ml-2 block text-sm text-gray-700">
-                  Is Service Group
+              <div className="md:col-span-2">
+                <label className="block text-sm font-medium text-gray-700 mb-1">
+                  Search Type *
                 </label>
+                <select
+                  name="search_type"
+                  value={formData.search_type || "Materials"}
+                  onChange={handleInputChange}
+                  className="w-full px-4 py-2.5 border rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all"
+                >
+                  <option value="Materials">Materials</option>
+                  <option value="service">Service</option>
+                  <option value="spares">Spares</option>
+                </select>
               </div>
               
               <div className="md:col-span-2">
@@ -677,7 +679,7 @@ export default function MaterialGroupsPage() {
           mgrp_shortname: "Short Name",
           mgrp_longname: "Long Name",
           sgrp_code: "Super Group",
-          is_service: "Is Service",
+          search_type: "Search Type",
           attribgrpid: "Attribute Group ID",
           notes: "Notes",
           created: "Created",

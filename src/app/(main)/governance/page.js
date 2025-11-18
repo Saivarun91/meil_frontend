@@ -69,20 +69,20 @@ const sections = [
     path: "/supergroups",
     permissionKey: "super", // 👈 matches "Supergroup Permissions"
   },
-  {
-    key: "validationLists",
-    title: "Validation Lists",
-    description: "Maintain lists for validation and compliance",
-    icon: CheckSquare,
-    color: "text-gray-700",
-    bgColor: "bg-gray-50",
-    btn: "Manage Validation Lists",
-    path: "/validation-lists",
-    permissionKey: "validation", // 👈 matches "Validation Lists"
-  },
+  // {
+  //   key: "validationLists",
+  //   title: "Validation Lists",
+  //   description: "Maintain lists for validation and compliance",
+  //   icon: CheckSquare,
+  //   color: "text-gray-700",
+  //   bgColor: "bg-gray-50",
+  //   btn: "Manage Validation Lists",
+  //   path: "/validation-lists",
+  //   permissionKey: "validation", // 👈 matches "Validation Lists"
+  // },
   {
     key: "materialAttributes",
-    title: "Material Attributes",
+    title: "Material Group Attributes",
     description: "Configure attributes for material groups",
     icon: Settings,
     color: "text-orange-600",

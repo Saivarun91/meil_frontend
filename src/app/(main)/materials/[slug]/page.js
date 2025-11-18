@@ -532,30 +532,26 @@ export default function MaterialDetailPage() {
                     <div className="mb-4">
                       <h4 className="text-sm font-medium text-gray-700 mb-2">Attributes</h4>
                       {itemDetails.item.attributes && Object.keys(itemDetails.item.attributes).length > 0 ? (
-                        <div className="border border-gray-200 rounded-md overflow-hidden">
-                          <div className="divide-y divide-gray-200">
-                            {Object.entries(itemDetails.item.attributes).map(([key, value]) => {
-                              // Find the attribute definition to get UOM
-                              const attrDef = itemDetails.attributes?.find(attr => attr.attrib_name === key);
-                              const uom = attrDef?.unit;
-                              
-                              return (
-                                <div key={key} className="px-4 py-3 bg-white hover:bg-gray-50 transition-colors">
-                                  <div className="flex justify-between items-center">
-                                    <div className="text-sm font-semibold text-gray-900">
-                                      {key}
-                                      {uom && (
-                                        <span className="ml-2 text-xs text-gray-500 font-normal">({uom})</span>
-                                      )}
-                                    </div>
-                                    <div className="text-sm text-gray-700 font-medium">
-                                      {value || "-"}
-                                    </div>
-                                  </div>
+                        <div className="space-y-4">
+                          {Object.entries(itemDetails.item.attributes).map(([key, value]) => {
+                            // Find the attribute definition to get UOM
+                            const attrDef = itemDetails.attributes?.find(attr => attr.attrib_name === key);
+                            const uom = attrDef?.unit;
+                            
+                            return (
+                              <div key={key} className="border rounded-lg p-4 bg-gray-50">
+                                <label className="block text-sm font-medium text-gray-700 mb-2">
+                                  {key}
+                                  {uom && (
+                                    <span className="ml-2 text-xs text-gray-500"></span>
+                                  )}
+                                </label>
+                                <div className="text-sm text-gray-700 font-medium bg-white px-4 py-2 border border-gray-200 rounded-lg">
+                                  {value || "-"}
                                 </div>
-                              );
-                            })}
-                          </div>
+                              </div>
+                            );
+                          })}
                         </div>
                       ) : (
                         <div className="bg-gray-50 p-3 rounded-md text-sm text-gray-500 text-center">
@@ -631,7 +627,7 @@ export default function MaterialDetailPage() {
                   d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z"
                 />
               </svg>
-              Item Not Found
+              Request Material
             </button>
           </div>
         </div>
