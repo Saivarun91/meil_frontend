@@ -15,7 +15,6 @@ export default function MaterialDetailPage() {
   // New state for the search flow
   const [materialGroup, setMaterialGroup] = useState(null);
   const [materialTypes, setMaterialTypes] = useState([]);
-  const [selectedMaterialType, setSelectedMaterialType] = useState(null);
   const [items, setItems] = useState([]);
   const [itemDetails, setItemDetails] = useState(null);
   const [loading, setLoading] = useState(false);
@@ -72,10 +71,10 @@ export default function MaterialDetailPage() {
     }
   }, [slug]);
 
-  // Fetch items when material type is selected
+  // Fetch all items in the group directly (no material type selection needed)
   useEffect(() => {
     const fetchItems = async () => {
-      if (!selectedMaterialType || !slug) {
+      if (!slug) {
         setItems([]);
         setSelectedItem(null);
         setItemDetails(null);
@@ -84,16 +83,13 @@ export default function MaterialDetailPage() {
 
       setLoadingItems(true);
       try {
-        // Use items_by_group_and_type to ensure items belong to the selected material group
-        // This endpoint already filters by both group_code and mat_type_code
+        // Use items_by_group to get all items in the group
         const res = await fetch(
-          `${process.env.NEXT_PUBLIC_API_BASE_URL}/api/matgroups/${slug}/items/${selectedMaterialType}/`
+          `${process.env.NEXT_PUBLIC_API_BASE_URL}/api/matgroups/${slug}/items/`
         );
         if (res.ok) {
           const itemsData = await res.json();
           // Format items to ensure consistent structure
-          // The items_by_group_and_type endpoint already filters by group, so all items should match
-          // But we'll format them properly and double-check the group code
           const formattedItems = itemsData
             .map(item => {
               // Handle mgrp_code - could be object (ForeignKey) or string
@@ -111,10 +107,10 @@ export default function MaterialDetailPage() {
               return {
                 local_item_id: item.local_item_id,
                 sap_id: item.sap_item_id,
-                item_desc: item.item_desc,
-                notes: item.notes,
+                item_desc: item.item_desc || item.short_name,
+                notes: item.notes || item.long_name,
                 mgrp_code: mgrpCode || slug, // Ensure it matches the slug
-                mat_type_code: matTypeCode || selectedMaterialType,
+                mat_type_code: matTypeCode,
               };
             })
             .filter(item => {
@@ -124,31 +120,7 @@ export default function MaterialDetailPage() {
           
           setItems(formattedItems);
         } else {
-          // Fallback to items_by_material_type with material group filter
-          const fallbackRes = await fetch(
-            `${process.env.NEXT_PUBLIC_API_BASE_URL}/api/materials/${selectedMaterialType}/items/?mgrp_code=${slug}`
-          );
-          if (fallbackRes.ok) {
-            const itemsData = await fallbackRes.json();
-            // Format items - backend now filters by group, but we'll ensure consistency
-            const formattedItems = itemsData
-              .filter(item => {
-                // Ensure item belongs to the selected material group
-                const mgrpCode = item.mgrp_code;
-                return mgrpCode === slug;
-              })
-              .map(item => ({
-                local_item_id: item.local_item_id,
-                sap_id: item.sap_id,
-                item_desc: item.item_desc,
-                notes: item.notes,
-                mgrp_code: item.mgrp_code || slug,
-                mat_type_code: selectedMaterialType,
-              }));
-            setItems(formattedItems);
-          } else {
-            setItems([]);
-          }
+          setItems([]);
         }
       } catch (err) {
         console.error("Error fetching items:", err);
@@ -158,8 +130,10 @@ export default function MaterialDetailPage() {
       }
     };
 
-    fetchItems();
-  }, [selectedMaterialType, slug]);
+    if (slug) {
+      fetchItems();
+    }
+  }, [slug]);
 
   // Fetch item details when item is selected
   useEffect(() => {
@@ -282,13 +256,6 @@ export default function MaterialDetailPage() {
     setIsFavorite(!isFavorite);
   };
 
-  // Handle material type selection
-  const handleMaterialTypeSelect = (matTypeCode) => {
-    setSelectedMaterialType(matTypeCode);
-    setSelectedItem(null);
-    setItemDetails(null);
-  };
-
   // Handle item selection
   const handleItemSelect = (item) => {
     setSelectedItem(item);
@@ -385,39 +352,8 @@ export default function MaterialDetailPage() {
             </div>
           </div>
 
-          {/* Material Types Selection */}
-          {materialTypes.length > 0 && (
-            <div className="mb-6">
-              <h3 className="text-lg font-medium text-gray-700 mb-3">Select Material Type</h3>
-              <div className="border border-gray-200 rounded-lg overflow-hidden">
-                <div className="bg-gray-50 px-4 py-2 border-b border-gray-200">
-                  <h4 className="text-sm font-medium text-gray-700">
-                    Material Types ({materialTypes.length})
-                  </h4>
-                </div>
-                <div className="max-h-48 overflow-y-auto">
-                  {materialTypes.map((matType) => (
-                    <div
-                      key={matType.mat_type_code}
-                      onClick={() => handleMaterialTypeSelect(matType.mat_type_code)}
-                      className={`px-4 py-3 border-b border-gray-100 cursor-pointer transition-colors ${
-                        selectedMaterialType === matType.mat_type_code
-                          ? "bg-blue-50 border-l-4 border-l-blue-600"
-                          : "hover:bg-gray-50"
-                      }`}
-                    >
-                      <div className="font-medium text-gray-800">{matType.mat_type_desc}</div>
-                      <div className="text-sm text-gray-500 font-mono">{matType.mat_type_code}</div>
-                    </div>
-                  ))}
-                </div>
-              </div>
-            </div>
-          )}
-
           {/* Items + Details */}
-          {selectedMaterialType && (
-            <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+          <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
               {/* Items List */}
               <div className="border border-gray-200 rounded-lg overflow-hidden shadow-inner">
                 <div className="bg-gray-50 px-4 py-2 border-b border-gray-200">
@@ -599,12 +535,11 @@ export default function MaterialDetailPage() {
                   </div>
                 )}
               </div>
-            </div>
-          )}
+          </div>
 
-          {!selectedMaterialType && materialTypes.length === 0 && (
+          {items.length === 0 && !loadingItems && (
             <div className="border border-gray-200 rounded-lg p-6 text-center">
-              <p className="text-gray-500">No material types found for this group.</p>
+              <p className="text-gray-500">No items found for this material group.</p>
             </div>
           )}
 

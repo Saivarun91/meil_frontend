@@ -174,6 +174,13 @@ export default function RequestDetailPage() {
 
   const handleAssignSap = async () => {
     if (!sapId.trim()) return;
+    
+    // Check if request is closed
+    if (request?.status?.toLowerCase() === 'closed') {
+      window.dispatchEvent(new CustomEvent('showToast', { detail: { type: 'error', message: 'Cannot update SAP ID: Request is closed' } }));
+      return;
+    }
+    
     try {
       await assignSapItem(token, id, sapId.trim());
       window.dispatchEvent(new CustomEvent('showToast', { detail: { type: 'success', message: `SAP Item ${sapId} assigned` } }));
@@ -189,6 +196,13 @@ export default function RequestDetailPage() {
 
   const handleAssignMaterialGroup = async () => {
     if (!materialGroupCode.trim()) return;
+    
+    // Check if request is closed
+    if (request?.status?.toLowerCase() === 'closed') {
+      window.dispatchEvent(new CustomEvent('showToast', { detail: { type: 'error', message: 'Cannot update Material Group: Request is closed' } }));
+      return;
+    }
+    
     try {
       await assignMaterialGroup(token, id, materialGroupCode.trim());
       window.dispatchEvent(new CustomEvent('showToast', { detail: { type: 'success', message: `Material Group ${materialGroupCode} assigned` } }));
@@ -263,6 +277,7 @@ export default function RequestDetailPage() {
       try {
         if (token) {
           const data = await fetchRequests(token);
+          console.log("data : ", data)
           const found = data.find(r => r.request_id == id);
           console.log("found : ", found)
           setRequest(found);
@@ -366,8 +381,9 @@ export default function RequestDetailPage() {
                       options={items}
                       value={sapId}
                       onChange={(value) => setSapId(value || "")}
-                      placeholder="Select SAP Item ID"
+                      placeholder={request?.status?.toLowerCase() === 'closed' ? "Request is closed - cannot update" : "Select SAP Item ID"}
                       searchPlaceholder="Search items by SAP ID or description..."
+                      disabled={request?.status?.toLowerCase() === 'closed'}
                       getOptionLabel={(option) => {
                         if (!option) return "";
                         if (option.sap_item_id) {
@@ -383,10 +399,11 @@ export default function RequestDetailPage() {
                   </div>
                   <button
                     onClick={handleAssignSap}
-                    disabled={!sapId.trim()}
+                    disabled={!sapId.trim() || request?.status?.toLowerCase() === 'closed'}
                     className="bg-green-600 text-white px-4 py-2 rounded-lg hover:bg-green-700 disabled:opacity-50 disabled:cursor-not-allowed whitespace-nowrap"
+                    title={request?.status?.toLowerCase() === 'closed' ? "Cannot update: Request is closed" : ""}
                   >
-                    Assign SAP
+                    {request?.sap_item ? "Update SAP" : "Assign SAP"}
                   </button>
                 </div>
               )}
@@ -397,8 +414,9 @@ export default function RequestDetailPage() {
                       options={materialGroups}
                       value={materialGroupCode}
                       onChange={(value) => setMaterialGroupCode(value || "")}
-                      placeholder="Select Material Group"
+                      placeholder={request?.status?.toLowerCase() === 'closed' ? "Request is closed - cannot update" : "Select Material Group"}
                       searchPlaceholder="Search material groups..."
+                      disabled={request?.status?.toLowerCase() === 'closed'}
                       getOptionLabel={(option) => {
                         if (!option) return "";
                         if (option.mgrp_code) {
@@ -414,10 +432,11 @@ export default function RequestDetailPage() {
                   </div>
                   <button
                     onClick={handleAssignMaterialGroup}
-                    disabled={!materialGroupCode.trim()}
+                    disabled={!materialGroupCode.trim() || request?.status?.toLowerCase() === 'closed'}
                     className="bg-green-600 text-white px-4 py-2 rounded-lg hover:bg-green-700 disabled:opacity-50 disabled:cursor-not-allowed whitespace-nowrap"
+                    title={request?.status?.toLowerCase() === 'closed' ? "Cannot update: Request is closed" : ""}
                   >
-                    Assign Material Group
+                    {request?.material_group ? "Update Material Group" : "Assign Material Group"}
                   </button>
                 </div>
               )}
@@ -546,26 +565,26 @@ export default function RequestDetailPage() {
                   <div>
                     <p className="font-medium text-gray-700">Created</p>
                     <p>
-                      By {request.created_by || "Unknown"} on{" "}
+                      By {request.createdby || "Unknown"} on{" "}
                       {request.created ? new Date(request.created).toLocaleDateString("en-GB") : "-"}
                     </p>
                   </div>
                 </div>
 
-                <div className="flex items-start">
-                  <div className="w-8 h-8 rounded-full bg-blue-100 flex items-center justify-center flex-shrink-0 mr-3">
+                {/* <div className="flex items-start"> */}
+                  {/* <div className="w-8 h-8 rounded-full bg-blue-100 flex items-center justify-center flex-shrink-0 mr-3">
                     <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4 text-blue-600" viewBox="0 0 20 20" fill="currentColor">
                       <path fillRule="evenodd" d="M10 9a3 3 0 100-6 3 3 0 000 6zm-7 9a7 7 0 1114 0H3z" clipRule="evenodd" />
                     </svg>
-                  </div>
-                  <div>
+                  </div> */}
+                  {/* <div>
                     <p className="font-medium text-gray-700">Assigned</p>
                     <p>
                       To {request.assigned_to || "Unassigned"} on{" "}
                       {request.assigned_date ? new Date(request.assigned_date).toLocaleDateString("en-GB") : "-"}
                     </p>
-                  </div>
-                </div>
+                  </div> */}
+                {/* </div> */}
 
                 <div className="flex items-start">
                   <div className="w-8 h-8 rounded-full bg-purple-100 flex items-center justify-center flex-shrink-0 mr-3">
@@ -576,7 +595,7 @@ export default function RequestDetailPage() {
                   <div>
                     <p className="font-medium text-gray-700">Updated</p>
                     <p>
-                      By {request.updated_by || "System"} on{" "}
+                      By {request.updatedby || "System"} on{" "}
                       {request.updated ? new Date(request.updated).toLocaleDateString("en-GB") : "-"}
                     </p>
                   </div>

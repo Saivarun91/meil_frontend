@@ -543,7 +543,7 @@ export default function MaterialsPage() {
                           </td>
                           <td className="px-6 py-4 text-sm text-gray-900">{material.mat_type_code || "-"}</td>
                           <td className="px-6 py-4 text-sm text-gray-900">{material.item_desc || material.short_name || "-"}</td>
-                          <td className="px-6 py-4 text-sm text-gray-900">{material.notes || material.long_name || "-"}</td>
+                          {/* <td className="px-6 py-4 text-sm text-gray-900">{material.notes || material.long_name || "-"}</td> */}
                           <td className="px-6 py-4 text-sm text-gray-900">{material.search_text || "-"}</td>
                           <td className="px-6 py-4 text-sm text-gray-900">{material.created || "-"}</td>
                           <td className="px-6 py-4 text-sm text-gray-900">{material.updated || "-"}</td>
@@ -692,7 +692,7 @@ export default function MaterialsPage() {
                   
                   <div>
                     <SearchableDropdown
-                      label="Material Type Code *"
+                      label="Material Type Code "
                       options={materialTypes}
                       value={formData.mat_type_code}
                       onChange={(value) => setFormData(prev => ({ ...prev, mat_type_code: value || "" }))}
@@ -712,7 +712,7 @@ export default function MaterialsPage() {
                   
                   <div>
                     <SearchableDropdown
-                      label="Material Group Code *"
+                      label="Material Group Code "
                       options={materialGroups}
                       value={formData.mgrp_code}
                       onChange={handleMgrpCodeChange}
@@ -727,6 +727,21 @@ export default function MaterialsPage() {
                         if (typeof option === 'string') return option;
                         return option.mgrp_code || option;
                       }}
+                    />
+                  </div>
+                  
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">Material Group Long Name</label>
+                    <input
+                      type="text"
+                      value={(() => {
+                        const matchedGroup = materialGroups.find(g => g.mgrp_code === formData.mgrp_code);
+                        return matchedGroup?.mgrp_longname || "";
+                      })()}
+                      readOnly
+                      className="w-full px-4 py-2 border rounded-lg bg-gray-50 text-gray-600 cursor-not-allowed"
+                      placeholder="Will be populated from selected Material Group"
+                      title="Material Group Long Name is automatically set from the selected Material Group"
                     />
                   </div>
                   
@@ -761,7 +776,7 @@ export default function MaterialsPage() {
                     )}
                   </div>
                   
-                  <div className="md:col-span-2">
+                  {/* <div className="md:col-span-2">
                     <label className="block text-sm font-medium text-gray-700 mb-1">Notes</label>
                     <textarea
                       name="notes"
@@ -771,7 +786,7 @@ export default function MaterialsPage() {
                       className="w-full px-4 py-2 border rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
                       placeholder="Additional notes"
                     />
-                  </div>
+                  </div> */}
                   
                   {/* Is Final Switch - Only show when editing */}
                   {editingMaterial && (
@@ -812,134 +827,146 @@ export default function MaterialsPage() {
                       <p>No attributes found for the selected Material Group.</p>
                     </div>
                   ) : (
-                    <div className="space-y-4">
-                      {Object.entries(materialAttributes).map(([attrName, attrConfig]) => {
-                        const values = attrConfig.values || [];
-                        const uoms = Array.isArray(attrConfig.uom) ? attrConfig.uom : (attrConfig.uom ? [attrConfig.uom] : []);
-                        const currentValue = formData.attributes[attrName] || "";
-                        const customValue = customAttributeValues[attrName] || "";
+                    <div className="overflow-x-auto">
+                      <div className="min-w-full">
+                        {/* Compact Table Header */}
+                        <div className="grid grid-cols-12 gap-2 px-3 py-2 bg-gray-100 border-b border-gray-300 text-xs font-semibold text-gray-700 uppercase tracking-wider">
+                          <div className="col-span-3">Attribute Name</div>
+                          <div className="col-span-3">Select Value</div>
+                          <div className="col-span-3">Custom Value</div>
+                          <div className="col-span-2">UOM</div>
+                          <div className="col-span-1">Status</div>
+                        </div>
                         
-                        // Extract value and UOM from currentValue if it contains UOM
-                        let displayValue = currentValue;
-                        let selectedUOM = "";
-                        if (currentValue && uoms.length > 0) {
-                          // Check if value ends with a UOM
-                          for (const uom of uoms) {
-                            if (currentValue.endsWith(` ${uom}`)) {
-                              displayValue = currentValue.replace(` ${uom}`, "");
-                              selectedUOM = uom;
-                              break;
+                        {/* Compact Table Body */}
+                        <div className="divide-y divide-gray-200">
+                          {Object.entries(materialAttributes).map(([attrName, attrConfig]) => {
+                            const values = attrConfig.values || [];
+                            const uoms = Array.isArray(attrConfig.uom) ? attrConfig.uom : (attrConfig.uom ? [attrConfig.uom] : []);
+                            const currentValue = formData.attributes[attrName] || "";
+                            const customValue = customAttributeValues[attrName] || "";
+                            
+                            // Extract value and UOM from currentValue if it contains UOM
+                            let displayValue = currentValue;
+                            let selectedUOM = "";
+                            if (currentValue && uoms.length > 0) {
+                              // Check if value ends with a UOM
+                              for (const uom of uoms) {
+                                if (currentValue.endsWith(` ${uom}`)) {
+                                  displayValue = currentValue.replace(` ${uom}`, "");
+                                  selectedUOM = uom;
+                                  break;
+                                }
+                              }
                             }
-                          }
-                        }
-                        
-                        // Check if current value is from dropdown or custom (after extracting UOM)
-                        // If customValue exists and matches displayValue, or if displayValue is not in dropdown values, it's custom
-                        const isFromDropdown = displayValue && values.includes(displayValue);
-                        const isCustomValue = customAttributeValues.hasOwnProperty(attrName) || (displayValue && !isFromDropdown);
-                        
-                        return (
-                          <div key={attrName} className="border rounded-lg p-4 bg-gray-50">
-                            <label className="block text-sm font-medium text-gray-700 mb-2">
-                              {attrName}
-                              {uoms.length > 0 && (
-                                <span className="ml-2 text-xs text-gray-500">
-                                  ({uoms.length === 1 ? uoms[0] : `${uoms.length} UOMs available`})
-                                </span>
-                              )}
-                            </label>
                             
-                            {/* Value Selection */}
-                            <div className="mb-3">
-                              <select
-                                value={isFromDropdown ? displayValue : ""}
-                                onChange={(e) => {
-                                  const selectedValue = e.target.value;
-                                  if (selectedValue) {
-                                    setCustomAttributeValues(prev => {
-                                      const newState = { ...prev };
-                                      delete newState[attrName];
-                                      return newState;
-                                    });
-                                    handleAttributeChange(attrName, selectedValue);
-                                  } else {
-                                    // Clear attribute when "Select from existing values" is chosen
-                                    handleAttributeChange(attrName, "");
-                                    setCustomAttributeValues(prev => {
-                                      const newState = { ...prev };
-                                      delete newState[attrName];
-                                      return newState;
-                                    });
-                                  }
-                                }}
-                                className="w-full px-4 py-2 border rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 bg-white mb-2"
-                              >
-                                <option value="">Select from existing values</option>
-                                {values.map((value) => (
-                                  <option key={value} value={value}>{value}</option>
-                                ))}
-                              </select>
-                              
-                              {/* Custom Value Input */}
-                              <div className="flex items-center gap-2">
-                                <span className="text-sm text-gray-500">OR</span>
-                                <input
-                                  type="text"
-                                  placeholder={`Enter custom ${attrName} value...`}
-                                  value={customAttributeValues.hasOwnProperty(attrName) ? customAttributeValues[attrName] : (isFromDropdown ? "" : (displayValue || ""))}
-                                  onChange={(e) => {
-                                    const newCustomValue = e.target.value;
-                                    // Always update custom value state when typing
-                                    setCustomAttributeValues(prev => ({
-                                      ...prev,
-                                      [attrName]: newCustomValue
-                                    }));
-                                    // Update attribute value (even if empty, to allow clearing)
-                                    handleAttributeChange(attrName, newCustomValue || "");
-                                  }}
-                                  onBlur={() => {
-                                    // Clear custom value state if field is empty and no value is selected
-                                    if (!currentValue && !customAttributeValues[attrName]) {
-                                      setCustomAttributeValues(prev => {
-                                        const newState = { ...prev };
-                                        delete newState[attrName];
-                                        return newState;
-                                      });
-                                    }
-                                  }}
-                                  className="flex-1 px-4 py-2 border rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 bg-white"
-                                />
-                              </div>
-                            </div>
+                            // Check if current value is from dropdown or custom (after extracting UOM)
+                            const isFromDropdown = displayValue && values.includes(displayValue);
+                            const isCustomValue = customAttributeValues.hasOwnProperty(attrName) || (displayValue && !isFromDropdown);
                             
-                            {/* UOM Selection (if UOMs available) */}
-                            {uoms.length > 0 && displayValue && (
-                              <div>
-                                <label className="block text-sm font-medium text-gray-700 mb-1">
-                                  Unit of Measure (UOM)
-                                </label>
-                                <select
-                                  value={selectedUOM}
-                                  onChange={(e) => handleUOMChange(attrName, e.target.value)}
-                                  className="w-full px-4 py-2 border rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 bg-white"
-                                >
-                                  <option value="">No UOM</option>
-                                  {uoms.map((uom) => (
-                                    <option key={uom} value={uom}>{uom}</option>
-                                  ))}
-                                </select>
+                            return (
+                              <div key={attrName} className="grid grid-cols-12 gap-2 px-3 py-3 hover:bg-gray-50 transition-colors">
+                                {/* Attribute Name */}
+                                <div className="col-span-3 flex flex-col">
+                                  <span className="text-sm font-medium text-gray-900">{attrName}</span>
+                                  {uoms.length > 0 && (
+                                    <span className="text-xs text-gray-500 mt-0.5">
+                                      {uoms.length === 1 ? uoms[0] : `${uoms.length} UOMs`}
+                                    </span>
+                                  )}
+                                </div>
+                                
+                                {/* Select Value */}
+                                <div className="col-span-3">
+                                  <select
+                                    value={isFromDropdown ? displayValue : ""}
+                                    onChange={(e) => {
+                                      const selectedValue = e.target.value;
+                                      if (selectedValue) {
+                                        setCustomAttributeValues(prev => {
+                                          const newState = { ...prev };
+                                          delete newState[attrName];
+                                          return newState;
+                                        });
+                                        handleAttributeChange(attrName, selectedValue);
+                                      } else {
+                                        handleAttributeChange(attrName, "");
+                                        setCustomAttributeValues(prev => {
+                                          const newState = { ...prev };
+                                          delete newState[attrName];
+                                          return newState;
+                                        });
+                                      }
+                                    }}
+                                    className="w-full px-2 py-1.5 text-sm border rounded focus:outline-none focus:ring-1 focus:ring-blue-500 bg-white"
+                                  >
+                                    <option value="">Select...</option>
+                                    {values.map((value) => (
+                                      <option key={value} value={value}>{value}</option>
+                                    ))}
+                                  </select>
+                                </div>
+                                
+                                {/* Custom Value Input */}
+                                <div className="col-span-3">
+                                  <input
+                                    type="text"
+                                    placeholder="Custom value..."
+                                    value={customAttributeValues.hasOwnProperty(attrName) ? customAttributeValues[attrName] : (isFromDropdown ? "" : (displayValue || ""))}
+                                    onChange={(e) => {
+                                      const newCustomValue = e.target.value;
+                                      setCustomAttributeValues(prev => ({
+                                        ...prev,
+                                        [attrName]: newCustomValue
+                                      }));
+                                      handleAttributeChange(attrName, newCustomValue || "");
+                                    }}
+                                    onBlur={() => {
+                                      if (!currentValue && !customAttributeValues[attrName]) {
+                                        setCustomAttributeValues(prev => {
+                                          const newState = { ...prev };
+                                          delete newState[attrName];
+                                          return newState;
+                                        });
+                                      }
+                                    }}
+                                    className="w-full px-2 py-1.5 text-sm border rounded focus:outline-none focus:ring-1 focus:ring-blue-500 bg-white"
+                                  />
+                                </div>
+                                
+                                {/* UOM Selection */}
+                                <div className="col-span-2">
+                                  {uoms.length > 0 && displayValue ? (
+                                    <select
+                                      value={selectedUOM}
+                                      onChange={(e) => handleUOMChange(attrName, e.target.value)}
+                                      className="w-full px-2 py-1.5 text-sm border rounded focus:outline-none focus:ring-1 focus:ring-blue-500 bg-white"
+                                    >
+                                      <option value="">No UOM</option>
+                                      {uoms.map((uom) => (
+                                        <option key={uom} value={uom}>{uom}</option>
+                                      ))}
+                                    </select>
+                                  ) : (
+                                    <span className="text-xs text-gray-400">-</span>
+                                  )}
+                                </div>
+                                
+                                {/* Status */}
+                                <div className="col-span-1 flex items-center">
+                                  {currentValue ? (
+                                    <span className="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-green-100 text-green-800">
+                                      Set
+                                    </span>
+                                  ) : (
+                                    <span className="text-xs text-gray-400">-</span>
+                                  )}
+                                </div>
                               </div>
-                            )}
-                            
-                            {/* Display selected value with UOM */}
-                            {currentValue && (
-                              <div className="mt-2 text-sm text-gray-600">
-                                <span className="font-medium">Selected:</span> {currentValue}
-                              </div>
-                            )}
-                          </div>
-                        );
-                      })}
+                            );
+                          })}
+                        </div>
+                      </div>
                     </div>
                   )}
                 </div>
@@ -1106,12 +1133,12 @@ export default function MaterialsPage() {
                     </div>
                   </div>
                   
-                  <div className="md:col-span-2">
-                    <label className="block text-sm font-medium text-gray-700 mb-1">Notes</label>
+                  {/* <div className="md:col-span-2"> */}
+                    {/* <label className="block text-sm font-medium text-gray-700 mb-1">Notes</label>
                     <div className="w-full px-4 py-2 border border-gray-300 rounded-lg bg-gray-50 text-gray-900 min-h-[60px]">
                       {viewingMaterial.notes || "N/A"}
-                    </div>
-                  </div>
+                    </div> */}
+                  {/* </div> */}
                   
                   {viewingMaterial.updated && (
                     <div>
@@ -1143,24 +1170,56 @@ export default function MaterialsPage() {
                       <p>No attributes found for the selected Material Group.</p>
                     </div>
                   ) : (
-                    <div className="space-y-4">
-                      {Object.entries(viewMaterialAttributes).map(([attrName, attrConfig]) => {
-                        const values = attrConfig.values || [];
-                        const currentValue = viewingMaterial.attributes?.[attrName] || "";
-                        return (
-                          <div key={attrName} className="border rounded-lg p-4 bg-gray-50">
-                            <label className="block text-sm font-medium text-gray-700 mb-2">
-                              {attrName}
-                              {attrConfig.uom && (
-                                <span className="ml-2 text-xs text-gray-500">({attrConfig.uom})</span>
-                              )}
-                            </label>
-                            <div className="text-sm text-gray-700 font-medium bg-white px-4 py-2 border border-gray-200 rounded-lg">
-                              {currentValue || "-"}
-                            </div>
-                          </div>
-                        );
-                      })}
+                    <div className="overflow-x-auto">
+                      <div className="min-w-full">
+                        {/* Compact Table Header */}
+                        <div className="grid grid-cols-12 gap-2 px-3 py-2 bg-gray-100 border-b border-gray-300 text-xs font-semibold text-gray-700 uppercase tracking-wider">
+                          <div className="col-span-4">Attribute Name</div>
+                          <div className="col-span-6">Value</div>
+                          <div className="col-span-2">UOM</div>
+                        </div>
+                        
+                        {/* Compact Table Body */}
+                        <div className="divide-y divide-gray-200">
+                          {Object.entries(viewMaterialAttributes).map(([attrName, attrConfig]) => {
+                            const currentValue = viewingMaterial.attributes?.[attrName] || "";
+                            const uoms = Array.isArray(attrConfig.uom) ? attrConfig.uom : (attrConfig.uom ? [attrConfig.uom] : []);
+                            
+                            // Extract UOM from value if present
+                            let displayValue = currentValue;
+                            let displayUOM = "";
+                            let hasUOMInValue = false;
+                            if (currentValue && uoms.length > 0) {
+                              for (const uom of uoms) {
+                                if (currentValue.endsWith(` ${uom}`)) {
+                                  displayValue = currentValue.replace(` ${uom}`, "");
+                                  displayUOM = uom;
+                                  hasUOMInValue = true;
+                                  break;
+                                }
+                              }
+                            }
+                            
+                            // Only show UOM if it was actually used in the value
+                            // If no UOM is in the value, show "-" even if UOMs are available
+                            const showUOM = hasUOMInValue ? displayUOM : "-";
+                            
+                            return (
+                              <div key={attrName} className="grid grid-cols-12 gap-2 px-3 py-2.5 hover:bg-gray-50 transition-colors">
+                                <div className="col-span-4">
+                                  <span className="text-sm font-medium text-gray-900">{attrName}</span>
+                                </div>
+                                <div className="col-span-6">
+                                  <span className="text-sm text-gray-700">{displayValue || "-"}</span>
+                                </div>
+                                <div className="col-span-2">
+                                  <span className="text-sm text-gray-600">{showUOM}</span>
+                                </div>
+                              </div>
+                            );
+                          })}
+                        </div>
+                      </div>
                     </div>
                   )}
                 </div>

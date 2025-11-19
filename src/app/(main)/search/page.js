@@ -630,17 +630,16 @@ export default function MaterialSearchPage() {
                       return (
                         <div
                           key={code}
-                          onClick={() => setSelectedFreeTextGroup(code)}
+                          onClick={() => router.push(`/materials/${code}`)}
                           onKeyDown={(e) => {
                             if (e.key === "Enter" || e.key === " ") {
                               e.preventDefault();
-                              setSelectedFreeTextGroup(code);
+                              router.push(`/materials/${code}`);
                             }
                           }}
                           role="button"
                           tabIndex={0}
-                          className={`p-3 border-b border-gray-100 hover:bg-blue-50 cursor-pointer transition-colors ${selectedFreeTextGroup === code ? "bg-blue-100 border-l-4 border-l-blue-600" : ""
-                            }`}
+                          className="p-3 border-b border-gray-100 hover:bg-blue-50 cursor-pointer transition-colors"
                         >
                           <div className="flex justify-between items-center">
                             <div>
@@ -669,17 +668,6 @@ export default function MaterialSearchPage() {
                     className="bg-red-600 text-white py-2 px-6 rounded-md shadow hover:bg-red-700 focus:outline-none focus:ring-2 focus:ring-red-500 focus:ring-offset-2 transition-colors flex-1"
                   >
                     Material Group Not Found
-                  </button>
-
-                  <button
-                    onClick={handleFreeTextSelect}
-                    disabled={!selectedFreeTextGroup}
-                    className={`py-2 px-6 rounded-md shadow focus:outline-none focus:ring-2 focus:ring-offset-2 transition-colors flex-1 ${selectedFreeTextGroup
-                      ? "bg-green-600 text-white hover:bg-green-700 focus:ring-green-500"
-                      : "bg-gray-200 text-gray-400 cursor-not-allowed"
-                      }`}
-                  >
-                    Select
                   </button>
                 </div>
 
@@ -725,17 +713,16 @@ export default function MaterialSearchPage() {
                     filteredMaterialGroups.map((group) => (
                       <div
                         key={group.mgrp_code}
-                        onClick={() => setSelectedDrillDownGroup(group.mgrp_code)}
+                        onClick={() => router.push(`/materials/${group.mgrp_code}`)}
                         onKeyDown={(e) => {
                           if (e.key === "Enter" || e.key === " ") {
                             e.preventDefault();
-                            setSelectedDrillDownGroup(group.mgrp_code);
+                            router.push(`/materials/${group.mgrp_code}`);
                           }
                         }}
                         role="button"
                         tabIndex={0}
-                        className={`p-3 border-b border-gray-100 hover:bg-blue-50 cursor-pointer transition-colors ${selectedDrillDownGroup === group.mgrp_code ? "bg-blue-100 border-l-4 border-l-blue-600" : ""
-                          }`}
+                        className="p-3 border-b border-gray-100 hover:bg-blue-50 cursor-pointer transition-colors"
                       >
                         <div className="font-semibold text-blue-700">{group.mgrp_code}</div>
                         <div className="text-sm text-gray-600">{group.mgrp_longname || group.mgrp_shortname}</div>
@@ -760,16 +747,6 @@ export default function MaterialSearchPage() {
                     Material Group Not Found
                   </button>
 
-                  <button
-                    onClick={handleDrillDownSelect}
-                    disabled={!selectedDrillDownGroup}
-                    className={`py-2 px-6 rounded-md shadow focus:outline-none focus:ring-2 focus:ring-offset-2 transition-colors flex-1 ${selectedDrillDownGroup
-                      ? "bg-green-600 text-white hover:bg-green-700 focus:ring-green-500"
-                      : "bg-gray-200 text-gray-400 cursor-not-allowed"
-                      }`}
-                  >
-                    Select Group
-                  </button>
                 </div>
 
                 {/* Quick Actions */}
