@@ -104,16 +104,42 @@ export default function MaterialsPage() {
         let uomArray = [];
         if (attr.uom) {
           if (Array.isArray(attr.uom)) {
-            uomArray = attr.uom;
+            // Flatten nested arrays and filter out empty values
+            uomArray = attr.uom.flat().filter(u => u && String(u).trim() !== '');
           } else if (typeof attr.uom === 'string') {
-            // Check if comma-separated
-            uomArray = attr.uom.includes(',') ? attr.uom.split(',').map(u => u.trim()) : [attr.uom];
+            // Try to parse if it's a string representation of an array
+            let parsed = attr.uom.trim();
+            if (parsed.startsWith('[') && parsed.endsWith(']')) {
+              try {
+                // Try to parse as JSON array
+                const parsedArray = JSON.parse(parsed);
+                if (Array.isArray(parsedArray)) {
+                  uomArray = parsedArray.filter(u => u && String(u).trim() !== '').map(u => String(u).trim());
+                }
+              } catch (e) {
+                // If JSON parse fails, try manual parsing
+                parsed = parsed.slice(1, -1); // Remove brackets
+                uomArray = parsed.split(',').map(u => {
+                  let val = u.trim().replace(/^['"]|['"]$/g, ''); // Remove quotes
+                  return val;
+                }).filter(u => u && u !== '');
+              }
+            } else if (parsed.includes(',')) {
+              // Comma-separated values
+              uomArray = parsed.split(',').map(u => u.trim()).filter(u => u && u !== '');
+            } else {
+              // Single value
+              uomArray = [parsed];
+            }
           }
         }
         
+        // Ensure all UOMs are strings and filter out empty values
+        uomArray = uomArray.map(u => String(u).trim()).filter(u => u && u !== '');
+        
         attributesObj[attr.attribute_name] = {
           values: attr.possible_values || [],
-          uom: uomArray.length > 0 ? uomArray : (attr.uom ? [attr.uom] : []),
+          uom: uomArray,
           print_priority: attr.print_priority || 0,
         };
       });
@@ -250,7 +276,16 @@ export default function MaterialsPage() {
   const handleUOMChange = (attrName, selectedUOM) => {
     const currentValue = formData.attributes[attrName] || "";
     const attrConfig = materialAttributes[attrName];
-    const uoms = Array.isArray(attrConfig?.uom) ? attrConfig.uom : (attrConfig?.uom ? [attrConfig.uom] : []);
+    // Extract and clean UOMs - flatten arrays and filter empty values
+    let uoms = [];
+    if (attrConfig?.uom) {
+      if (Array.isArray(attrConfig.uom)) {
+        uoms = attrConfig.uom.flat().map(u => String(u).trim()).filter(u => u && u !== '');
+      } else {
+        const uomStr = String(attrConfig.uom).trim();
+        if (uomStr) uoms = [uomStr];
+      }
+    }
     
     // Extract base value (remove any existing UOM)
     let baseValue = currentValue;
@@ -269,15 +304,28 @@ export default function MaterialsPage() {
   };
 
   const handleMgrpCodeChange = async (mgrpCode) => {
-    setFormData(prev => ({ ...prev, mgrp_code: mgrpCode || "", attributes: {} }));
-    if (mgrpCode) {
-      await loadMaterialAttributes(mgrpCode);
+    const codeValue = mgrpCode ? String(mgrpCode).trim() : "";
+    setFormData(prev => ({ ...prev, mgrp_code: codeValue, attributes: {} }));
+    if (codeValue) {
+      await loadMaterialAttributes(codeValue);
     }
   };
 
+  // Helper function to check if attributes have values
+  const hasAttributeValues = (attributes) => {
+    if (!attributes || Object.keys(attributes).length === 0) return false;
+    return Object.values(attributes).some(v => v && String(v).trim());
+  };
+
   const handleSaveMaterial = async () => {
-    if (!formData.mat_type_code || !formData.mgrp_code || !formData.item_desc) {
-      setError("Please fill in required fields: Material Type Code, Material Group Code, and Short Name");
+    // Check if required fields are filled
+    const hasMatType = formData.mat_type_code?.trim();
+    const hasMgrpCode = formData.mgrp_code?.trim();
+    const hasItemDesc = formData.item_desc?.trim();
+    const hasAttributes = hasAttributeValues(formData.attributes);
+    
+    if (!hasMatType || !hasMgrpCode || (!hasItemDesc && !hasAttributes)) {
+      setError("Please fill in required fields: Material Type Code, Material Group Code, and either Short Name or Attributes");
       return;
     }
 
@@ -299,10 +347,20 @@ export default function MaterialsPage() {
       setError(null);
       // const token = localStorage.getItem("token");
 
+      // Prepare form data - ensure all required fields are properly formatted
+      // If item_desc is empty but attributes are filled, send a placeholder
+      // (backend will auto-generate from attributes and replace the placeholder)
+      const dataToSend = {
+        ...formData,
+        mat_type_code: hasMatType ? String(formData.mat_type_code).trim() : formData.mat_type_code,
+        mgrp_code: hasMgrpCode ? String(formData.mgrp_code).trim() : formData.mgrp_code,
+        item_desc: hasItemDesc ? formData.item_desc.trim() : (hasAttributes ? "Auto-generated" : formData.item_desc)
+      };
+
       if (editingMaterial) {
-        await updateItemMaster(token, editingMaterial.local_item_id, formData);
+        await updateItemMaster(token, editingMaterial.local_item_id, dataToSend);
       } else {
-        await createItemMaster(token, formData);
+        await createItemMaster(token, dataToSend);
       }
 
       await loadMaterials();
@@ -695,7 +753,10 @@ export default function MaterialsPage() {
                       label="Material Type Code "
                       options={materialTypes}
                       value={formData.mat_type_code}
-                      onChange={(value) => setFormData(prev => ({ ...prev, mat_type_code: value || "" }))}
+                      onChange={(value) => {
+                        const codeValue = value ? String(value).trim() : "";
+                        setFormData(prev => ({ ...prev, mat_type_code: codeValue }));
+                      }}
                       placeholder="Select material type..."
                       searchPlaceholder="Search material types..."
                       required
@@ -842,7 +903,16 @@ export default function MaterialsPage() {
                         <div className="divide-y divide-gray-200">
                           {Object.entries(materialAttributes).map(([attrName, attrConfig]) => {
                             const values = attrConfig.values || [];
-                            const uoms = Array.isArray(attrConfig.uom) ? attrConfig.uom : (attrConfig.uom ? [attrConfig.uom] : []);
+                            // Extract and clean UOMs - flatten arrays and filter empty values
+                            let uoms = [];
+                            if (attrConfig.uom) {
+                              if (Array.isArray(attrConfig.uom)) {
+                                uoms = attrConfig.uom.flat().map(u => String(u).trim()).filter(u => u && u !== '');
+                              } else {
+                                const uomStr = String(attrConfig.uom).trim();
+                                if (uomStr) uoms = [uomStr];
+                              }
+                            }
                             const currentValue = formData.attributes[attrName] || "";
                             const customValue = customAttributeValues[attrName] || "";
                             
@@ -871,7 +941,7 @@ export default function MaterialsPage() {
                                   <span className="text-sm font-medium text-gray-900">{attrName}</span>
                                   {uoms.length > 0 && (
                                     <span className="text-xs text-gray-500 mt-0.5">
-                                      {uoms.length === 1 ? uoms[0] : `${uoms.length} UOMs`}
+                                      {uoms.join(", ")}
                                     </span>
                                   )}
                                 </div>
@@ -983,7 +1053,7 @@ export default function MaterialsPage() {
               </button>
               <button
                 onClick={handleSaveMaterial}
-                disabled={saving || !formData.mat_type_code || !formData.mgrp_code || !formData.item_desc}
+                disabled={saving || !formData.mat_type_code?.trim() || !formData.mgrp_code?.trim() || (!formData.item_desc?.trim() && !hasAttributeValues(formData.attributes))}
                 className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:opacity-50 flex items-center"
               >
                 {saving && <Loader2 className="animate-spin h-4 w-4 mr-2" />}
