@@ -601,7 +601,7 @@ export default function MaterialsPage() {
                           </td>
                           <td className="px-6 py-4 text-sm text-gray-900">{material.mat_type_code || "-"}</td>
                           <td className="px-6 py-4 text-sm text-gray-900">{material.item_desc || material.short_name || "-"}</td>
-                          {/* <td className="px-6 py-4 text-sm text-gray-900">{material.notes || material.long_name || "-"}</td> */}
+                          <td className="px-6 py-4 text-sm text-gray-900">{material.notes || material.long_name || "-"}</td>
                           <td className="px-6 py-4 text-sm text-gray-900">{material.search_text || "-"}</td>
                           <td className="px-6 py-4 text-sm text-gray-900">{material.created || "-"}</td>
                           <td className="px-6 py-4 text-sm text-gray-900">{material.updated || "-"}</td>
@@ -849,30 +849,28 @@ export default function MaterialsPage() {
                     />
                   </div> */}
                   
-                  {/* Is Final Switch - Only show when editing */}
-                  {editingMaterial && (
-                    <div className="md:col-span-2">
-                      <div className="flex items-center justify-between p-4 bg-gray-50 rounded-lg border border-gray-200">
-                        <div>
-                          <label className="block text-sm font-medium text-gray-700 mb-1">
-                            Mark as Final
-                          </label>
-                          <p className="text-xs text-gray-500">
-                            Toggle this to move the material to Cleaned Data tab
-                          </p>
-                        </div>
-                        <label className="relative inline-flex items-center cursor-pointer">
-                          <input
-                            type="checkbox"
-                            checked={formData.is_final}
-                            onChange={(e) => setFormData(prev => ({ ...prev, is_final: e.target.checked }))}
-                            className="sr-only peer"
-                          />
-                          <div className="w-11 h-6 bg-gray-200 peer-focus:outline-none peer-focus:ring-4 peer-focus:ring-blue-300 rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-blue-600"></div>
+                  {/* Is Final Switch - Show in both add and edit forms */}
+                  <div className="md:col-span-2">
+                    <div className="flex items-center justify-between p-4 bg-gray-50 rounded-lg border border-gray-200">
+                      <div>
+                        <label className="block text-sm font-medium text-gray-700 mb-1">
+                          Mark as Final
                         </label>
+                        <p className="text-xs text-gray-500">
+                          Toggle this to move the material to Cleaned Data tab
+                        </p>
                       </div>
+                      <label className="relative inline-flex items-center cursor-pointer">
+                        <input
+                          type="checkbox"
+                          checked={formData.is_final}
+                          onChange={(e) => setFormData(prev => ({ ...prev, is_final: e.target.checked }))}
+                          className="sr-only peer"
+                        />
+                        <div className="w-11 h-6 bg-gray-200 peer-focus:outline-none peer-focus:ring-4 peer-focus:ring-blue-300 rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-blue-600"></div>
+                      </label>
                     </div>
-                  )}
+                  </div>
                 </div>
               )}
 

@@ -404,6 +404,7 @@ export default function RequestsPage() {
                                 <thead className="bg-gray-50">
                                     <tr>
                                         <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">ID</th>
+                                        <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Type</th>
                                         <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Project Code</th>
                                         <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Description</th>
                                         <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Created By</th>
@@ -426,6 +427,20 @@ export default function RequestsPage() {
   onClick={() => router.push(`/requests/${request.request_id}`)}
   className="px-6 py-4 text-sm text-gray-900 cursor-pointer hover:text-blue-600 hover:underline"
 >
+  <div className="flex flex-col">
+    <span className="font-medium capitalize">{request.type || "N/A"}</span>
+    {request.type === 'material' && request.sap_item && (
+      <span className="text-xs text-gray-500 mt-0.5">Item ID: {request.sap_item}</span>
+    )}
+    {request.type === 'material group' && request.material_group && (
+      <span className="text-xs text-gray-500 mt-0.5">Group: {request.material_group}</span>
+    )}
+  </div>
+</td>
+<td
+  onClick={() => router.push(`/requests/${request.request_id}`)}
+  className="px-6 py-4 text-sm text-gray-900 cursor-pointer hover:text-blue-600 hover:underline"
+>
   {request.project_code || "N/A"}
 </td>
 <td
@@ -436,7 +451,7 @@ export default function RequestsPage() {
 </td>
 
                                           <td className="px-6 py-4 text-sm text-gray-900">
-                                            {request.created_by || "N/A"}
+                                            {request.created_by || request.createdby || "N/A"}
                                           </td>
                                           <td className="px-6 py-4 text-sm text-gray-900">
                                             {request.created ? new Date(request.created).toLocaleDateString() : "N/A"}
@@ -472,7 +487,7 @@ export default function RequestsPage() {
                                         ))
                                     ) : (
                                         <tr>
-                                            <td colSpan="7" className="px-6 py-4 text-center text-sm text-gray-500">
+                                            <td colSpan="8" className="px-6 py-4 text-center text-sm text-gray-500">
                                                 {requests.length === 0
                                                     ? "No requests found. Add a new request to get started."
                                                     : "No requests found matching your criteria."}

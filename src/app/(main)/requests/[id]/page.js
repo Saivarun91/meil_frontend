@@ -51,67 +51,8 @@ export default function RequestDetailPage() {
     loadChat();
   }, [id, token]);
 
-  // WebSocket: live chat updates
-  useEffect(() => {
-    if (!id) return;
 
-    const apiBase = process.env.NEXT_PUBLIC_API_BASE_URL || ""; // e.g., http://127.0.0.1:8000/
-    let wsUrl = "";
-    try {
-      const apiUrl = new URL(apiBase);
-      const wsProtocol = apiUrl.protocol === "https:" ? "wss:" : "ws:";
-      wsUrl = `${wsProtocol}//${apiUrl.host}/ws/chat/${id}/`;
-    } catch (_) {
-      // Fallback to same-origin
-      const protocol = typeof window !== "undefined" && window.location.protocol === "https:" ? "wss" : "ws";
-      const host = typeof window !== "undefined" ? window.location.host : "";
-      wsUrl = `${protocol}://${host}/ws/chat/${id}/`;
-    }
-
-    let socket;
-    try {
-      socket = new WebSocket(wsUrl);
-    } catch (e) {
-      return;
-    }
-
-    socket.onopen = () => {
-      // eslint-disable-next-line no-console
-      console.log("WS connected:", wsUrl);
-    };
-
-    socket.onmessage = (event) => {
-      try {
-        const data = JSON.parse(event.data);
-        if (data?.type === "chat" && data.message) {
-          setChatMessages((prev) => [...prev, data.message]);
-        }
-      } catch (e) {
-        // ignore malformed
-      }
-    };
-
-    socket.onerror = (e) => {
-      // eslint-disable-next-line no-console
-      console.error("WS error:", e);
-    };
-
-    socket.onclose = () => {
-      // eslint-disable-next-line no-console
-      console.warn("WS closed");
-    };
-
-    // Optional: keep connection alive
-    const pingInterval = setInterval(() => {
-      try { socket?.readyState === 1 && socket.send(JSON.stringify({ type: "ping" })); } catch (e) { }
-    }, 25000);
-
-    return () => {
-      clearInterval(pingInterval);
-      try { socket && socket.close(); } catch (e) { }
-    };
-  }, [id]);
-
+  
   useEffect(() => {
     if (request) {
       setEditedRequest({
@@ -318,11 +259,23 @@ export default function RequestDetailPage() {
               <div className="flex flex-col sm:flex-row sm:justify-between sm:items-start gap-4 mb-6">
                 <div>
                   <h1 className="text-2xl font-bold text-gray-800">{request.title || "Request"}</h1>
-                  <div className="flex items-center mt-2">
-                    <span className="text-sm text-gray-500 bg-gray-100 px-2 py-1 rounded-md mr-2">
+                  <div className="flex items-center mt-2 flex-wrap gap-2">
+                    <span className="text-sm text-gray-500 bg-gray-100 px-2 py-1 rounded-md">
                       {request.request_code || `REQ-${id}`}
                     </span>
-                    <span className="text-sm text-gray-500">• Material</span>
+                    <span className="text-sm text-gray-500 capitalize">
+                      • {request.type || "Request"}
+                    </span>
+                    {request.type === 'material' && request.sap_item && (
+                      <span className="text-sm text-blue-600 bg-blue-50 px-2 py-1 rounded-md font-medium">
+                        Item ID: {request.sap_item}
+                      </span>
+                    )}
+                    {request.type === 'material group' && request.material_group && (
+                      <span className="text-sm text-blue-600 bg-blue-50 px-2 py-1 rounded-md font-medium">
+                        Group: {request.material_group}
+                      </span>
+                    )}
                   </div>
                 </div>
                 <div className="flex items-center space-x-2">
