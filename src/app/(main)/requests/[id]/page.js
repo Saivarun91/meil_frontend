@@ -51,6 +51,110 @@ export default function RequestDetailPage() {
     loadChat();
   }, [id, token]);
 
+  // WebSocket connection for real-time chat updates
+  useEffect(() => {
+    if (!id || !token) return;
+
+    let ws = null;
+    let reconnectTimeout = null;
+    let isManualClose = false;
+
+    const connectWebSocket = () => {
+      // Determine WebSocket URL based on API base URL
+      const apiUrl = process.env.NEXT_PUBLIC_API_BASE_URL || 'http://localhost:8000';
+      const wsProtocol = apiUrl.startsWith('https') ? 'wss:' : 'ws:';
+      const wsHost = apiUrl.replace(/^https?:\/\//, '');
+      // Pass token as query parameter for authentication
+      const wsUrl = `${wsProtocol}//${wsHost}/ws/chat/${id}/?token=${encodeURIComponent(token)}`;
+
+      try {
+        ws = new WebSocket(wsUrl);
+
+        ws.onopen = () => {
+          console.log('✅ WebSocket connected for request', id);
+          // Clear any pending reconnect
+          if (reconnectTimeout) {
+            clearTimeout(reconnectTimeout);
+            reconnectTimeout = null;
+          }
+        };
+
+        ws.onmessage = (event) => {
+          try {
+            const data = JSON.parse(event.data);
+            console.log('📨 WebSocket message received:', data);
+            
+            if (data.type === 'chat' && data.message) {
+              // Add new message to chat
+              setChatMessages(prev => {
+                // Check if message already exists to avoid duplicates
+                const messageExists = prev.some(msg => 
+                  msg.message === data.message.message && 
+                  msg.timestamp === data.message.timestamp
+                );
+                if (messageExists) {
+                  console.log('⚠️ Duplicate message ignored');
+                  return prev;
+                }
+                
+                console.log('➕ Adding new message to chat');
+                return [...prev, {
+                  sender: data.message.sender,
+                  message: data.message.message,
+                  timestamp: data.message.timestamp,
+                }];
+              });
+            } else if (data.type === 'system' && data.message === 'connected') {
+              console.log('✅ WebSocket connection confirmed');
+            }
+          } catch (err) {
+            console.error('❌ Error parsing WebSocket message:', err);
+          }
+        };
+
+        ws.onerror = (error) => {
+          console.error('❌ WebSocket error:', error);
+        };
+
+        ws.onclose = (event) => {
+          console.log('🔌 WebSocket disconnected for request', id, 'Code:', event.code);
+          
+          // Only reconnect if it wasn't a manual close and not a normal closure
+          if (!isManualClose && event.code !== 1000) {
+            console.log('🔄 Attempting to reconnect in 3 seconds...');
+            reconnectTimeout = setTimeout(() => {
+              if (id && token) {
+                connectWebSocket();
+              }
+            }, 3000);
+          }
+        };
+      } catch (error) {
+        console.error('❌ Failed to create WebSocket:', error);
+        // Retry connection after delay
+        reconnectTimeout = setTimeout(() => {
+          if (id && token) {
+            connectWebSocket();
+          }
+        }, 3000);
+      }
+    };
+
+    // Initial connection
+    connectWebSocket();
+
+    // Cleanup on unmount
+    return () => {
+      isManualClose = true;
+      if (reconnectTimeout) {
+        clearTimeout(reconnectTimeout);
+      }
+      if (ws) {
+        ws.close();
+      }
+    };
+  }, [id, token]);
+
 
   
   useEffect(() => {
