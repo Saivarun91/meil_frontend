@@ -177,7 +177,7 @@ export default function FavoritesPage() {
           /* No Results for Search */
           <div className="text-center py-12 bg-white rounded-lg border border-gray-200">
             <Search className="h-16 w-16 text-gray-300 mx-auto mb-4" />
-            <p className="text-gray-500 text-lg">No favorites found matching "{searchTerm}"</p>
+            <p className="text-gray-500 text-lg">No favorites found matching &quot;{searchTerm}&quot;</p>
             <button
               onClick={() => setSearchTerm("")}
               className="mt-4 text-blue-600 hover:text-blue-700 text-sm"
