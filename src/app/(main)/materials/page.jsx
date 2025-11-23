@@ -29,6 +29,8 @@ export default function MaterialsPage() {
   const [viewMaterialAttributes, setViewMaterialAttributes] = useState({});
   const [customAttributeValues, setCustomAttributeValues] = useState({}); // Store custom values per attribute
   const [tableTab, setTableTab] = useState("raw"); // "raw" or "cleaned"
+  const [duplicateMaterials, setDuplicateMaterials] = useState(null); // Store duplicate materials info
+  const [showDuplicateModal, setShowDuplicateModal] = useState(false);
   
   const [formData, setFormData] = useState({
     sap_item_id: "",
@@ -357,19 +359,112 @@ export default function MaterialsPage() {
         item_desc: hasItemDesc ? formData.item_desc.trim() : (hasAttributes ? "Auto-generated" : formData.item_desc)
       };
 
+      let response;
       if (editingMaterial) {
-        await updateItemMaster(token, editingMaterial.local_item_id, dataToSend);
+        response = await updateItemMaster(token, editingMaterial.local_item_id, dataToSend);
       } else {
-        await createItemMaster(token, dataToSend);
+        response = await createItemMaster(token, dataToSend);
+      }
+
+      // Check if response contains duplicate warning
+      if (response && response.warning && response.duplicates) {
+        setDuplicateMaterials({
+          warning: response.warning,
+          message: response.message,
+          duplicates: response.duplicates
+        });
+        setShowDuplicateModal(true);
+        setSaving(false);
+        return; // Don't close modal or reload, wait for user decision
       }
 
       await loadMaterials();
       handleCloseModal();
     } catch (err) {
+      // Check if error response contains duplicate information
+      if (err.response?.status === 200 && err.response?.data?.warning && err.response?.data?.duplicates) {
+        setDuplicateMaterials({
+          warning: err.response.data.warning,
+          message: err.response.data.message,
+          duplicates: err.response.data.duplicates
+        });
+        setShowDuplicateModal(true);
+        setSaving(false);
+        return;
+      }
       setError("Failed to save material: " + (err.response?.data?.error || err.message));
     } finally {
       setSaving(false);
     }
+  };
+
+  // Handle duplicate modal - proceed with creation
+  const handleProceedWithDuplicate = async () => {
+    if (!formData.mat_type_code?.trim() || !formData.mgrp_code?.trim()) return;
+
+    try {
+      setSaving(true);
+      setError(null);
+      setShowDuplicateModal(false);
+
+      const hasMatType = formData.mat_type_code?.trim();
+      const hasMgrpCode = formData.mgrp_code?.trim();
+      const hasItemDesc = formData.item_desc?.trim();
+      const hasAttributes = hasAttributeValues(formData.attributes);
+
+      const dataToSend = {
+        ...formData,
+        mat_type_code: hasMatType ? String(formData.mat_type_code).trim() : formData.mat_type_code,
+        mgrp_code: hasMgrpCode ? String(formData.mgrp_code).trim() : formData.mgrp_code,
+        item_desc: hasItemDesc ? formData.item_desc.trim() : (hasAttributes ? "Auto-generated" : formData.item_desc),
+        force_create: true // Add flag to bypass duplicate check
+      };
+
+      let response;
+      if (editingMaterial) {
+        response = await updateItemMaster(token, editingMaterial.local_item_id, dataToSend);
+      } else {
+        response = await createItemMaster(token, dataToSend);
+      }
+
+      // Check again for duplicates (shouldn't happen with force_create, but just in case)
+      if (response && response.warning && response.duplicates) {
+        setDuplicateMaterials({
+          warning: response.warning,
+          message: response.message,
+          duplicates: response.duplicates
+        });
+        setShowDuplicateModal(true);
+        setSaving(false);
+        return;
+      }
+
+      await loadMaterials();
+      setDuplicateMaterials(null);
+      handleCloseModal();
+    } catch (err) {
+      // Check if error response contains duplicate information
+      if (err.response?.status === 200 && err.response?.data?.warning && err.response?.data?.duplicates) {
+        setDuplicateMaterials({
+          warning: err.response.data.warning,
+          message: err.response.data.message,
+          duplicates: err.response.data.duplicates
+        });
+        setShowDuplicateModal(true);
+        setSaving(false);
+        return;
+      }
+      setError("Failed to save material: " + (err.response?.data?.error || err.message));
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  // Handle duplicate modal - cancel
+  const handleCancelDuplicate = () => {
+    setShowDuplicateModal(false);
+    setDuplicateMaterials(null);
+    setSaving(false);
   };
 
   const handleDelete = async (local_item_id) => {
@@ -1305,6 +1400,104 @@ export default function MaterialsPage() {
                 className="px-4 py-2 border rounded-lg text-gray-700 hover:bg-gray-50"
               >
                 Close
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Duplicate Materials Warning Modal */}
+      {showDuplicateModal && duplicateMaterials && (
+        <div 
+          className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50"
+        >
+          <div className="bg-white rounded-lg shadow-lg w-full max-w-3xl max-h-[90vh] overflow-y-auto">
+            <div className="flex justify-between items-center p-6 border-b">
+              <div className="flex items-center">
+                <div className="bg-yellow-100 p-3 rounded-lg mr-4">
+                  <svg className="h-6 w-6 text-yellow-600" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
+                  </svg>
+                </div>
+                <div>
+                  <h2 className="text-xl font-semibold text-gray-800">Duplicate Material Detected</h2>
+                  <p className="text-sm text-gray-500 mt-1">{duplicateMaterials.message}</p>
+                </div>
+              </div>
+              <button 
+                onClick={handleCancelDuplicate} 
+                className="text-gray-400 hover:text-gray-600"
+              >
+                ✕
+              </button>
+            </div>
+
+            <div className="p-6">
+              <div className="bg-yellow-50 border border-yellow-200 rounded-lg p-4 mb-4">
+                <p className="text-yellow-800 text-sm">
+                  <strong>Warning:</strong> The material you are trying to add has the same attributes and material group as the following existing material(s). 
+                  Please review the duplicates below before proceeding.
+                </p>
+              </div>
+
+              <div className="mb-4">
+                <h3 className="text-lg font-semibold text-gray-700 mb-3">Duplicate Materials:</h3>
+                <div className="overflow-x-auto">
+                  <table className="w-full border-collapse">
+                    <thead className="bg-gray-100">
+                      <tr>
+                        <th className="px-4 py-2 text-left text-sm font-semibold text-gray-700 border border-gray-300">Local Item ID</th>
+                        <th className="px-4 py-2 text-left text-sm font-semibold text-gray-700 border border-gray-300">SAP Item ID</th>
+                        <th className="px-4 py-2 text-left text-sm font-semibold text-gray-700 border border-gray-300">Material Group Code</th>
+                        <th className="px-4 py-2 text-left text-sm font-semibold text-gray-700 border border-gray-300">Short Name</th>
+                        <th className="px-4 py-2 text-left text-sm font-semibold text-gray-700 border border-gray-300">Attributes</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {duplicateMaterials.duplicates.map((duplicate, index) => (
+                        <tr key={duplicate.local_item_id} className={index % 2 === 0 ? "bg-white" : "bg-gray-50"}>
+                          <td className="px-4 py-2 text-sm text-gray-900 border border-gray-300">{duplicate.local_item_id}</td>
+                          <td className="px-4 py-2 text-sm text-gray-900 border border-gray-300">
+                            <span className="font-mono font-semibold text-blue-600">{duplicate.sap_item_id || "N/A"}</span>
+                          </td>
+                          <td className="px-4 py-2 text-sm text-gray-900 border border-gray-300">{duplicate.mgrp_code}</td>
+                          <td className="px-4 py-2 text-sm text-gray-900 border border-gray-300">{duplicate.short_name}</td>
+                          <td className="px-4 py-2 text-sm text-gray-900 border border-gray-300">
+                            {duplicate.attributes && Object.keys(duplicate.attributes).length > 0 ? (
+                              <div className="flex flex-wrap gap-1">
+                                {Object.entries(duplicate.attributes).map(([key, value]) => (
+                                  <span key={key} className="inline-block bg-blue-100 text-blue-800 px-2 py-1 rounded text-xs">
+                                    {key}: {value}
+                                  </span>
+                                ))}
+                              </div>
+                            ) : (
+                              <span className="text-gray-400">-</span>
+                            )}
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+            </div>
+
+            <div className="flex justify-end space-x-3 p-6 border-t">
+              <button
+                onClick={handleCancelDuplicate}
+                disabled={saving}
+                className="px-4 py-2 border rounded-lg text-gray-700 hover:bg-gray-50 disabled:opacity-50"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={handleProceedWithDuplicate}
+                disabled={saving}
+                className="px-4 py-2 bg-yellow-600 text-white rounded-lg hover:bg-yellow-700 disabled:opacity-50 flex items-center"
+              >
+                {saving && <Loader2 className="animate-spin h-4 w-4 mr-2" />}
+                Proceed Anyway
               </button>
             </div>
           </div>

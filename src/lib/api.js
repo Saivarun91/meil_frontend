@@ -216,9 +216,23 @@ export const fetchItemMasters = (token) => {
     return axiosInstance.get("itemmaster/list/").then(res => res.data);
 };
 
-export const createItemMaster = (token, data) => {
+ export const createItemMaster = async (token, data) => {
     const axiosInstance = createAxiosInstance(token);
-    return axiosInstance.post("itemmaster/create/", data).then(res => res.data);
+    try {
+        const response = await axiosInstance.post("itemmaster/create/", data);
+        // Check if response contains duplicate warning (status 200 with warning)
+        if (response.data && response.data.warning && response.data.duplicates) {
+            // Return the warning data so frontend can handle it
+            return response.data;
+        }
+        return response.data;
+    } catch (error) {
+        // Check if error response contains duplicate information (status 200)
+        if (error.response && error.response.status === 200 && error.response.data && error.response.data.warning) {
+            return error.response.data;
+        }
+        throw error;
+    }
 };
 
 export const updateItemMaster = (token, local_item_id, data) => {
@@ -307,4 +321,25 @@ export const addChatMessage = (token, request_id, message) => {
     return axiosInstance
         .post(`requests/chat/add/${request_id}/`, { message })
         .then(res => res.data);
+};
+
+// Favorites API
+export const fetchFavorites = (token) => {
+    const axiosInstance = createAxiosInstance(token);
+    return axiosInstance.get("favorites/list/").then(res => res.data);
+};
+
+export const addFavorite = (token, mgrp_code) => {
+    const axiosInstance = createAxiosInstance(token);
+    return axiosInstance.post("favorites/add/", { mgrp_code }).then(res => res.data);
+};
+
+export const removeFavorite = (token, mgrp_code) => {
+    const axiosInstance = createAxiosInstance(token);
+    return axiosInstance.post("favorites/remove/", { mgrp_code }).then(res => res.data);
+};
+
+export const removeFavoriteById = (token, favorite_id) => {
+    const axiosInstance = createAxiosInstance(token);
+    return axiosInstance.delete(`favorites/remove/${favorite_id}/`).then(res => res.data);
 };

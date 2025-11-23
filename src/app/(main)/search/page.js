@@ -1,10 +1,10 @@
 "use client";
 import { useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
-import { createRequest, fetchProjects } from "@/lib/api";
+import { createRequest, fetchProjects, fetchFavorites, addFavorite, removeFavorite } from "@/lib/api";
 import { useAuth } from "@/context/AuthContext";
 import SearchableDropdown from "@/components/SearchableDropdown";
-import { Loader2 } from "lucide-react";
+import { Loader2, Star } from "lucide-react";
 
 export default function MaterialSearchPage() {
   // Section 1 states (existing)
@@ -37,6 +37,14 @@ export default function MaterialSearchPage() {
   const [materialGroupCode, setMaterialGroupCode] = useState("");
   const [similarMaterialGroups, setSimilarMaterialGroups] = useState([]);
   const [loadingSimilarGroups, setLoadingSimilarGroups] = useState(false);
+  
+  // Favorites state
+  const [favorites, setFavorites] = useState([]);
+  const [showFavorites, setShowFavorites] = useState(false);
+  const [isFavoritesModalOpen, setIsFavoritesModalOpen] = useState(false);
+  const [favoriteGroupsData, setFavoriteGroupsData] = useState([]);
+  const [loadingFavorites, setLoadingFavorites] = useState(false);
+  const [favoriteCodes, setFavoriteCodes] = useState(new Set()); // Track which groups are favorited
 
   // Request modal states
   const [isRequestModalOpen, setIsRequestModalOpen] = useState(false);
@@ -192,10 +200,13 @@ export default function MaterialSearchPage() {
     }
   };
 
-  // Handle material group code search
-  const handleMaterialGroupSearch = () => {
-    if (materialGroupCode.trim()) {
-      router.push(`/materials/${materialGroupCode.trim()}`);
+  // Handle material group code search (case-insensitive)
+  const handleMaterialGroupSearch = (code = null) => {
+    const searchCode = code || materialGroupCode;
+    if (searchCode && searchCode.trim()) {
+      // Normalize to uppercase for consistency (backend handles case-insensitive search)
+      const normalizedCode = searchCode.trim().toUpperCase();
+      router.push(`/materials/${normalizedCode}`);
     }
   };
 
@@ -265,6 +276,164 @@ export default function MaterialSearchPage() {
     };
     loadProjects();
   }, [token, isRequestModalOpen]);
+
+  // Load favorites on mount
+  useEffect(() => {
+    const loadFavorites = async () => {
+      if (token) {
+        try {
+          const favoritesData = await fetchFavorites(token);
+          // Extract mgrp_code from favorites
+          const codes = favoritesData.map(fav => fav.mgrp_code);
+          setFavorites(codes);
+          setFavoriteCodes(new Set(codes));
+          setFavoriteGroupsData(favoritesData);
+        } catch (err) {
+          console.error("Error loading favorites:", err);
+          // Fallback to localStorage if API fails
+          const savedFavorites = JSON.parse(localStorage.getItem('materialFavorites') || '[]');
+          setFavorites(savedFavorites);
+          setFavoriteCodes(new Set(savedFavorites));
+        }
+      } else {
+        // Fallback to localStorage if no token
+        const savedFavorites = JSON.parse(localStorage.getItem('materialFavorites') || '[]');
+        setFavorites(savedFavorites);
+        setFavoriteCodes(new Set(savedFavorites));
+      }
+    };
+    loadFavorites();
+  }, [token]);
+
+  // Load favorites when modal opens
+  useEffect(() => {
+    const loadFavoritesForModal = async () => {
+      if (isFavoritesModalOpen && token) {
+        setLoadingFavorites(true);
+        try {
+          const favoritesData = await fetchFavorites(token);
+          setFavoriteGroupsData(favoritesData);
+          const codes = favoritesData.map(fav => fav.mgrp_code);
+          setFavorites(codes);
+          setFavoriteCodes(new Set(codes));
+        } catch (err) {
+          console.error("Error loading favorites:", err);
+        } finally {
+          setLoadingFavorites(false);
+        }
+      }
+    };
+    loadFavoritesForModal();
+  }, [isFavoritesModalOpen, token]);
+
+  // Toggle favorite function
+  const handleToggleFavorite = async (mgrpCode, e) => {
+    e?.stopPropagation(); // Prevent navigation when clicking star
+    if (!token) return;
+    
+    const isFavorited = favoriteCodes.has(mgrpCode);
+    
+    try {
+      if (isFavorited) {
+        await removeFavorite(token, mgrpCode);
+        setFavoriteCodes(prev => {
+          const newSet = new Set(prev);
+          newSet.delete(mgrpCode);
+          return newSet;
+        });
+        setFavorites(prev => prev.filter(code => code !== mgrpCode));
+        setFavoriteGroupsData(prev => prev.filter(fav => fav.mgrp_code !== mgrpCode));
+      } else {
+        await addFavorite(token, mgrpCode);
+        setFavoriteCodes(prev => new Set(prev).add(mgrpCode));
+        setFavorites(prev => [...prev, mgrpCode]);
+        // Optionally fetch the full group data
+        try {
+          const favoritesData = await fetchFavorites(token);
+          setFavoriteGroupsData(favoritesData);
+        } catch (err) {
+          console.error("Error refreshing favorites:", err);
+        }
+      }
+    } catch (err) {
+      console.error("Error toggling favorite:", err);
+    }
+  };
+
+  // Load favorite material groups data when showFavorites is true
+  useEffect(() => {
+    const loadFavoriteGroups = async () => {
+      if (showFavorites && token && favorites.length > 0) {
+        setLoadingFavorites(true);
+        try {
+          // Fetch favorites from backend
+          const favoritesData = await fetchFavorites(token);
+          setFavoriteGroupsData(favoritesData);
+          // Update favorites list with codes
+          const codes = favoritesData.map(fav => fav.mgrp_code);
+          setFavorites(codes);
+          setFavoriteCodes(new Set(codes));
+        } catch (err) {
+          console.error("Error loading favorites:", err);
+          // Fallback: try to load from individual API calls
+          if (favorites.length > 0) {
+            try {
+              const groupsData = await Promise.all(
+                favorites.map(async (code) => {
+                  try {
+                    const res = await fetch(
+                      `${process.env.NEXT_PUBLIC_API_BASE_URL}/api/matgroups/by-code/${code}/`
+                    );
+                    if (res.ok) {
+                      const data = await res.json();
+                      return { mgrp_code: code, ...data.group };
+                    }
+                    return null;
+                  } catch (err) {
+                    console.error(`Error loading favorite ${code}:`, err);
+                    return null;
+                  }
+                })
+              );
+              setFavoriteGroupsData(groupsData.filter(g => g !== null));
+            } catch (err2) {
+              console.error("Error loading favorites from individual calls:", err2);
+            }
+          }
+        } finally {
+          setLoadingFavorites(false);
+        }
+      } else if (showFavorites && favorites.length > 0) {
+        // Fallback to localStorage-based loading
+        setLoadingFavorites(true);
+        try {
+          const groupsData = await Promise.all(
+            favorites.map(async (code) => {
+              try {
+                const res = await fetch(
+                  `${process.env.NEXT_PUBLIC_API_BASE_URL}/api/matgroups/by-code/${code}/`
+                );
+                if (res.ok) {
+                  const data = await res.json();
+                  return { mgrp_code: code, ...data.group };
+                }
+                return null;
+              } catch (err) {
+                console.error(`Error loading favorite ${code}:`, err);
+                return null;
+              }
+            })
+          );
+          setFavoriteGroupsData(groupsData.filter(g => g !== null));
+        } catch (err) {
+          console.error("Error loading favorites:", err);
+        } finally {
+          setLoadingFavorites(false);
+        }
+      }
+    };
+    loadFavoriteGroups();
+  }, [showFavorites, token]);
 
   // Handle Material Group Not Found button click
   const handleMaterialGroupNotFound = () => {
@@ -557,15 +726,32 @@ export default function MaterialSearchPage() {
                           return (
                             <div
                               key={code}
-                              onClick={() => {
-                                setMaterialGroupCode(code);
-                                setSimilarMaterialGroups([]);
-                                handleMaterialGroupSearch();
-                              }}
-                              className="p-2 hover:bg-blue-50 cursor-pointer border-b border-gray-100 last:border-b-0"
+                              className="p-2 hover:bg-blue-50 cursor-pointer border-b border-gray-100 last:border-b-0 flex justify-between items-center"
                             >
-                              <div className="font-semibold text-sm text-blue-700">{code}</div>
-                              {name && <div className="text-xs text-gray-600">{name}</div>}
+                              <div
+                                onClick={() => {
+                                  setMaterialGroupCode(code);
+                                  setSimilarMaterialGroups([]);
+                                  // Use the selected code directly instead of waiting for state update
+                                  handleMaterialGroupSearch(code);
+                                }}
+                                className="flex-1"
+                              >
+                                <div className="font-semibold text-sm text-blue-700">{code}</div>
+                                {name && <div className="text-xs text-gray-600">{name}</div>}
+                              </div>
+                              <button
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  handleToggleFavorite(code, e);
+                                }}
+                                className="p-1 hover:bg-gray-200 rounded transition-colors ml-2"
+                                title={favoriteCodes.has(code) ? "Remove from favorites" : "Add to favorites"}
+                              >
+                                <Star
+                                  className={`h-4 w-4 ${favoriteCodes.has(code) ? "fill-yellow-400 text-yellow-400" : "text-gray-400"}`}
+                                />
+                              </button>
                             </div>
                           );
                         })}
@@ -642,12 +828,23 @@ export default function MaterialSearchPage() {
                           className="p-3 border-b border-gray-100 hover:bg-blue-50 cursor-pointer transition-colors"
                         >
                           <div className="flex justify-between items-center">
-                            <div>
+                            <div className="flex-1">
                               <div className="font-semibold text-blue-700">{code}</div>
                               <div className="text-sm text-gray-600">{name}</div>
                             </div>
-                            <div className="text-xs bg-green-400 text-white p-2 font-mono rounded-md">
-                              Rank: {rank}
+                            <div className="flex items-center gap-2">
+                              <div className="text-xs bg-green-400 text-white p-2 font-mono rounded-md">
+                                Rank: {rank}
+                              </div>
+                              <button
+                                onClick={(e) => handleToggleFavorite(code, e)}
+                                className="p-1 hover:bg-gray-200 rounded transition-colors"
+                                title={favoriteCodes.has(code) ? "Remove from favorites" : "Add to favorites"}
+                              >
+                                <Star
+                                  className={`h-5 w-5 ${favoriteCodes.has(code) ? "fill-yellow-400 text-yellow-400" : "text-gray-400"}`}
+                                />
+                              </button>
                             </div>
                           </div>
                         </div>
@@ -676,7 +873,12 @@ export default function MaterialSearchPage() {
                   <h3 className="text-sm font-medium text-gray-700 mb-2">Quick Actions</h3>
                   <div className="grid grid-cols-2 gap-3">
                     <button className="text-xs bg-gray-100 hover:bg-gray-200 text-gray-700 py-2 px-3 rounded-md transition-colors">Create New Request</button>
-                    <button className="text-xs bg-gray-100 hover:bg-gray-200 text-gray-700 py-2 px-3 rounded-md transition-colors">View Favorites</button>
+                    <button 
+                      onClick={() => setIsFavoritesModalOpen(true)}
+                      className="text-xs bg-gray-100 hover:bg-gray-200 text-gray-700 py-2 px-3 rounded-md transition-colors"
+                    >
+                      View Favorites
+                    </button>
                   </div>
                 </div>
               </>
@@ -724,8 +926,21 @@ export default function MaterialSearchPage() {
                         tabIndex={0}
                         className="p-3 border-b border-gray-100 hover:bg-blue-50 cursor-pointer transition-colors"
                       >
-                        <div className="font-semibold text-blue-700">{group.mgrp_code}</div>
-                        <div className="text-sm text-gray-600">{group.mgrp_longname || group.mgrp_shortname}</div>
+                        <div className="flex justify-between items-center">
+                          <div className="flex-1">
+                            <div className="font-semibold text-blue-700">{group.mgrp_code}</div>
+                            <div className="text-sm text-gray-600">{group.mgrp_longname || group.mgrp_shortname}</div>
+                          </div>
+                          <button
+                            onClick={(e) => handleToggleFavorite(group.mgrp_code, e)}
+                            className="p-1 hover:bg-gray-200 rounded transition-colors"
+                            title={favoriteCodes.has(group.mgrp_code) ? "Remove from favorites" : "Add to favorites"}
+                          >
+                            <Star
+                              className={`h-5 w-5 ${favoriteCodes.has(group.mgrp_code) ? "fill-yellow-400 text-yellow-400" : "text-gray-400"}`}
+                            />
+                          </button>
+                        </div>
                       </div>
                     ))
                   ) : (
@@ -754,7 +969,12 @@ export default function MaterialSearchPage() {
                   <h3 className="text-sm font-medium text-gray-700 mb-2">Quick Actions</h3>
                   <div className="grid grid-cols-2 gap-3">
                     <button className="text-xs bg-gray-100 hover:bg-gray-200 text-gray-700 py-2 px-3 rounded-md transition-colors">Create New Request</button>
-                    <button className="text-xs bg-gray-100 hover:bg-gray-200 text-gray-700 py-2 px-3 rounded-md transition-colors">View Favorites</button>
+                    <button 
+                      onClick={() => setIsFavoritesModalOpen(true)}
+                      className="text-xs bg-gray-100 hover:bg-gray-200 text-gray-700 py-2 px-3 rounded-md transition-colors"
+                    >
+                      View Favorites
+                    </button>
                   </div>
                 </div>
               </>
@@ -762,34 +982,79 @@ export default function MaterialSearchPage() {
 
             {searchTab === "materialGroup" && (
               <>
-                <div className="border border-gray-200 rounded-md p-6 h-72 flex flex-col items-center justify-center text-center">
-                  <svg
-                    className="mx-auto h-12 w-12 text-gray-400"
-                    fill="none"
-                    viewBox="0 0 24 24"
-                    stroke="currentColor"
-                  >
-                    <path
-                      strokeLinecap="round"
-                      strokeLinejoin="round"
-                      strokeWidth="2"
-                      d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"
-                    />
-                  </svg>
-                  <h3 className="mt-4 text-sm font-medium text-gray-900">
-                    Enter Material Group Code
-                  </h3>
-                  <p className="mt-2 text-sm text-gray-500">
-                    Enter a material group code in the search field and click Search to navigate.
-                  </p>
-                </div>
+                {showFavorites ? (
+                  <>
+                    <div className="flex justify-between items-center mb-4">
+                      <h2 className="text-xl font-semibold text-gray-700">My Favorites</h2>
+                      <span className="text-sm text-gray-500">
+                        {favoriteGroupsData.length} {favoriteGroupsData.length === 1 ? 'favorite' : 'favorites'}
+                      </span>
+                    </div>
+                    <div className="border border-gray-200 rounded-md h-72 overflow-y-auto shadow-inner">
+                      {loadingFavorites ? (
+                        <div className="p-4 text-center text-gray-500">
+                          <div className="animate-spin rounded-full h-6 w-6 border-b-2 border-blue-600 mx-auto"></div>
+                          <p className="mt-2">Loading favorites...</p>
+                        </div>
+                      ) : favoriteGroupsData.length > 0 ? (
+                        favoriteGroupsData.map((group) => {
+                          const code = group.mgrp_code || group.code;
+                          const name = group.mgrp_longname || group.mgrp_shortname || "";
+                          return (
+                            <div
+                              key={code}
+                              onClick={() => router.push(`/materials/${code}`)}
+                              className="p-3 border-b border-gray-100 hover:bg-blue-50 cursor-pointer transition-colors"
+                            >
+                              <div className="font-semibold text-blue-700">{code}</div>
+                              <div className="text-sm text-gray-600">{name}</div>
+                            </div>
+                          );
+                        })
+                      ) : (
+                        <div className="p-4 text-center text-gray-500">
+                          {favoriteGroupsData.length === 0
+                            ? "No favorites yet. Add materials to your favorites list to see them here."
+                            : "Error loading favorites. Please try again."}
+                        </div>
+                      )}
+                    </div>
+                  </>
+                ) : (
+                  <div className="border border-gray-200 rounded-md p-6 h-72 flex flex-col items-center justify-center text-center">
+                    <svg
+                      className="mx-auto h-12 w-12 text-gray-400"
+                      fill="none"
+                      viewBox="0 0 24 24"
+                      stroke="currentColor"
+                    >
+                      <path
+                        strokeLinecap="round"
+                        strokeLinejoin="round"
+                        strokeWidth="2"
+                        d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"
+                      />
+                    </svg>
+                    <h3 className="mt-4 text-sm font-medium text-gray-900">
+                      Enter Material Group Code
+                    </h3>
+                    <p className="mt-2 text-sm text-gray-500">
+                      Enter a material group code in the search field and click Search to navigate.
+                    </p>
+                  </div>
+                )}
 
                 {/* Quick Actions */}
                 <div className="mt-6 pt-4 border-t border-gray-200">
                   <h3 className="text-sm font-medium text-gray-700 mb-2">Quick Actions</h3>
                   <div className="grid grid-cols-2 gap-3">
                     <button className="text-xs bg-gray-100 hover:bg-gray-200 text-gray-700 py-2 px-3 rounded-md transition-colors">Create New Request</button>
-                    <button className="text-xs bg-gray-100 hover:bg-gray-200 text-gray-700 py-2 px-3 rounded-md transition-colors">View Favorites</button>
+                    <button 
+                      onClick={() => setIsFavoritesModalOpen(true)}
+                      className="text-xs bg-gray-100 hover:bg-gray-200 text-gray-700 py-2 px-3 rounded-md transition-colors"
+                    >
+                      View Favorites
+                    </button>
                   </div>
                 </div>
               </>
@@ -801,6 +1066,108 @@ export default function MaterialSearchPage() {
           © 2023 Company Name. All rights reserved. | v2.4.1
         </div>
       </div>
+
+      {/* Favorites Modal */}
+      {isFavoritesModalOpen && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50">
+          <div className="bg-white rounded-lg shadow-lg w-full max-w-3xl max-h-[90vh] overflow-y-auto">
+            <div className="flex justify-between items-center p-6 border-b">
+              <h2 className="text-xl font-semibold text-gray-800 flex items-center gap-2">
+                <Star className="h-6 w-6 fill-yellow-400 text-yellow-400" />
+                My Favorites
+              </h2>
+              <button 
+                onClick={() => setIsFavoritesModalOpen(false)} 
+                className="text-gray-400 hover:text-gray-600 text-2xl"
+              >
+                ✕
+              </button>
+            </div>
+
+            <div className="p-6">
+              {loadingFavorites ? (
+                <div className="flex items-center justify-center py-12">
+                  <Loader2 className="h-8 w-8 animate-spin text-blue-600" />
+                  <span className="ml-3 text-gray-600">Loading favorites...</span>
+                </div>
+              ) : favoriteGroupsData.length > 0 ? (
+                <div className="space-y-3">
+                  {favoriteGroupsData.map((fav) => {
+                    const code = fav.mgrp_code;
+                    const name = fav.mgrp_longname || fav.mgrp_shortname || '';
+                    
+                    return (
+                      <div
+                        key={fav.id || code}
+                        className="p-4 border border-gray-200 rounded-lg hover:bg-blue-50 transition-colors flex justify-between items-center"
+                      >
+                        <div 
+                          className="flex-1 cursor-pointer"
+                          onClick={() => {
+                            router.push(`/materials/${code}`);
+                            setIsFavoritesModalOpen(false);
+                          }}
+                        >
+                          <div className="font-semibold text-blue-700">{code}</div>
+                          {name && <div className="text-sm text-gray-600 mt-1">{name}</div>}
+                        </div>
+                        <div className="flex items-center gap-3">
+                          <button
+                            onClick={() => {
+                              router.push(`/materials/${code}`);
+                              setIsFavoritesModalOpen(false);
+                            }}
+                            className="px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 transition-colors text-sm"
+                          >
+                            View
+                          </button>
+                          <button
+                            onClick={async (e) => {
+                              e.stopPropagation();
+                              try {
+                                await removeFavorite(token, code);
+                                // Refresh favorites list
+                                const favoritesData = await fetchFavorites(token);
+                                setFavoriteGroupsData(favoritesData);
+                                const codes = favoritesData.map(f => f.mgrp_code);
+                                setFavorites(codes);
+                                setFavoriteCodes(new Set(codes));
+                              } catch (err) {
+                                console.error("Error removing favorite:", err);
+                              }
+                            }}
+                            className="p-2 hover:bg-red-50 rounded transition-colors"
+                            title="Remove from favorites"
+                          >
+                            <Star className="h-5 w-5 fill-yellow-400 text-yellow-400" />
+                          </button>
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+              ) : (
+                <div className="text-center py-12">
+                  <Star className="h-16 w-16 text-gray-300 mx-auto mb-4" />
+                  <p className="text-gray-500 text-lg">No favorites yet</p>
+                  <p className="text-gray-400 text-sm mt-2">
+                    Click the star icon on any material group to add it to your favorites
+                  </p>
+                </div>
+              )}
+            </div>
+
+            <div className="flex justify-end p-6 border-t">
+              <button
+                onClick={() => setIsFavoritesModalOpen(false)}
+                className="px-4 py-2 bg-gray-200 text-gray-700 rounded-md hover:bg-gray-300 transition-colors"
+              >
+                Close
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* Request Modal */}
       {isRequestModalOpen && (

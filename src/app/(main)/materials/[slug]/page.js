@@ -1,16 +1,36 @@
 "use client";
 import { useParams, useRouter } from "next/navigation";
 import { useState, useEffect } from "react";
-import { createRequest, fetchProjects } from "@/lib/api";
+import { createRequest, fetchProjects, addFavorite, removeFavorite, fetchFavorites } from "@/lib/api";
 import { useAuth } from "@/context/AuthContext";
 import { Loader2 } from "lucide-react";
 
 export default function MaterialDetailPage() {
   const { slug } = useParams();
   const router = useRouter();
+  const { token } = useAuth(); // Move useAuth before useEffect that uses token
   const [selectedItem, setSelectedItem] = useState(null);
   const [copied, setCopied] = useState(false);
   const [isFavorite, setIsFavorite] = useState(false);
+  
+  // Load favorite status on mount
+  useEffect(() => {
+    const loadFavoriteStatus = async () => {
+      if (slug && token) {
+        try {
+          const favorites = await fetchFavorites(token);
+          const isFav = favorites.some(fav => fav.mgrp_code === slug);
+          setIsFavorite(isFav);
+        } catch (err) {
+          console.error("Error loading favorite status:", err);
+          // Fallback to localStorage if API fails
+          const localFavorites = JSON.parse(localStorage.getItem('materialFavorites') || '[]');
+          setIsFavorite(localFavorites.includes(slug));
+        }
+      }
+    };
+    loadFavoriteStatus();
+  }, [slug, token]);
   
   // New state for the search flow
   const [materialGroup, setMaterialGroup] = useState(null);
@@ -32,7 +52,6 @@ export default function MaterialDetailPage() {
   const [projects, setProjects] = useState([]);
   const [savingRequest, setSavingRequest] = useState(false);
   const [requestError, setRequestError] = useState(null);
-  const { token } = useAuth();
 
   // Fetch material group info and material types on mount
   useEffect(() => {
@@ -252,8 +271,37 @@ export default function MaterialDetailPage() {
   };
 
   // Toggle Favorite
-  const toggleFavorite = () => {
-    setIsFavorite(!isFavorite);
+  const toggleFavorite = async () => {
+    if (!token || !slug) return;
+    
+    const newFavoriteStatus = !isFavorite;
+    
+    try {
+      if (newFavoriteStatus) {
+        // Add to favorites
+        await addFavorite(token, slug);
+        setIsFavorite(true);
+      } else {
+        // Remove from favorites
+        await removeFavorite(token, slug);
+        setIsFavorite(false);
+      }
+    } catch (err) {
+      console.error("Error toggling favorite:", err);
+      // Fallback to localStorage if API fails
+      const favorites = JSON.parse(localStorage.getItem('materialFavorites') || '[]');
+      if (newFavoriteStatus) {
+        if (!favorites.includes(slug)) {
+          favorites.push(slug);
+          localStorage.setItem('materialFavorites', JSON.stringify(favorites));
+        }
+        setIsFavorite(true);
+      } else {
+        const updatedFavorites = favorites.filter(fav => fav !== slug);
+        localStorage.setItem('materialFavorites', JSON.stringify(updatedFavorites));
+        setIsFavorite(false);
+      }
+    }
   };
 
   // Handle item selection

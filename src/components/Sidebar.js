@@ -10,6 +10,7 @@ import {
     User,
     Package,
     Search,
+    Star,
   } from "lucide-react";
 import { useAuth } from "../context/AuthContext";
 import Image from "next/image";
@@ -22,6 +23,7 @@ export default function Sidebar() {
     const navItems = [
       { name: "Home", href: "/app", icon: Home,keywords: ["home"] },
       { name: "Search", href: "/search", icon: Search,keywords: ["search"] },
+      { name: "Favorites", href: "/favorites", icon: Star,keywords: ["favorites", "favourites", "search"] },
       { name: "Requests", href: "/requests", icon: FilePlus,keywords: ["request"] },
       { name: "Materials", href: "/materials", icon: Package,keywords: ["materials"] },
       { name: "Governance", href: "/governance", icon: ShieldCheck,keywords: ["governance"] },
